@@ -100,7 +100,7 @@ io.on('connection', (socket) => {
   socket.on('chat-message', (data) => {
     if (socket.data.channel) {
       socket.to(socket.data.channel).emit('chat-message', {
-        text: data.text,
+        ...data,
         username: socket.data.username,
         id: socket.id,
         timestamp: new Date().toISOString()
