@@ -152,10 +152,10 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
       </div>
 
       {/* Grid Layout */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: peers.length > 2 ? '1fr 1fr' : '1fr', gap: '4px', pading: '4px', overflowY: 'auto' }}>
-         <div style={{ position: 'relative', background: '#222' }}>
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gridAutoRows: 'minmax(140px, 1fr)', gap: '4px', padding: '4px', overflowY: 'auto' }}>
+         <div style={{ position: 'relative', background: '#222', borderRadius: '8px', overflow: 'hidden' }}>
             <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <div style={{ position: 'absolute', bottom: 10, left: 10, background: 'rgba(0,0,0,0.6)', padding: '2px 8px', borderRadius: 10 }}>Anda</div>
+            <div style={{ position: 'absolute', bottom: 10, left: 10, background: 'rgba(0,0,0,0.6)', padding: '2px 8px', borderRadius: 10, fontSize: '0.8rem' }}>Anda</div>
          </div>
          {peers.map(peer => (
            <PeerVideo key={peer.id} peer={peer} />
@@ -187,9 +187,9 @@ const PeerVideo = ({ peer }) => {
   }, [peer]);
 
   return (
-    <div style={{ position: 'relative', background: '#222' }}>
+    <div style={{ position: 'relative', background: '#222', borderRadius: '8px', overflow: 'hidden' }}>
       <video ref={videoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-      <div style={{ position: 'absolute', bottom: 10, left: 10, background: 'rgba(0,0,0,0.6)', padding: '2px 8px', borderRadius: 10 }}>{peer.username}</div>
+      <div style={{ position: 'absolute', bottom: 10, left: 10, background: 'rgba(0,0,0,0.6)', padding: '2px 8px', borderRadius: 10, fontSize: '0.8rem' }}>{peer.username}</div>
     </div>
   );
 };
