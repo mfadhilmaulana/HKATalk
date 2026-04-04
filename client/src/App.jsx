@@ -43,6 +43,8 @@ export default function App() {
   const [activeFrame, setActiveFrame] = useState(null);
   const localVideoRef = useRef(null);
 
+  const [activeRadio, setActiveRadio] = useState(null); // FIX MISSING STATE!
+
   const [messages, setMessages] = useState([]);
   const isRecordingRef = useRef(false);
 

@@ -387,9 +387,14 @@ body {
   margin-bottom: 1rem;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: #1e1e1e;
-  color: var(--text-main);
+  background: #222;
+  color: #ffffff;
   box-sizing: border-box;
+  font-size: 1.05rem;
+}
+
+.form-input::placeholder {
+  color: #888;
 }
 
 .form-input:focus {
