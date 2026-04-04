@@ -145,8 +145,8 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
       {/* Header */}
       <div style={{ background: '#000', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div style={{ fontWeight: 'bold' }}>Rapat Dadakan HD</div>
-          <div style={{ fontSize: '0.8rem', color: 'gray' }}>Kunci ID: {roomCode}</div>
+          <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}><Video size={16} color="var(--accent)" /> HD Video Meeting</div>
+          <div style={{ fontSize: '0.8rem', color: 'gray' }}>Kunci ID: <span style={{color: 'white', fontWeight: 'bold', letterSpacing: '1px', paddingLeft: '2px'}}>{roomCode}</span></div>
         </div>
         <PhoneCall size={20} color="var(--accent-secondary)" />
       </div>

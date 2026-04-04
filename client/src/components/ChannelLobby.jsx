@@ -1,7 +1,9 @@
-import React from 'react';
-import { Route, Search } from 'lucide-react';
+import React, { useState } from 'react';
+import { Route, Search, Video, LogIn } from 'lucide-react';
 
 export default function ChannelLobby({ username, onJoinChannel }) {
+  const [joinCode, setJoinCode] = useState('');
+
   const hkaChannels = [
     { id: 'bakter', name: 'Tol Bakauheni - Terbanggi Besar' },
     { id: 'terpeka', name: 'Tol Terbanggi B. - P. Panggang' },
@@ -10,6 +12,12 @@ export default function ChannelLobby({ username, onJoinChannel }) {
     { id: 'jorrs', name: 'Tol JORR-S' },
     { id: 'pusat', name: 'Pusat Komando (Puskodal)' }
   ];
+
+  const handleJoinMeeting = () => {
+    if (joinCode.trim().length > 0) {
+      onJoinChannel(`MEETING-${joinCode.trim().toUpperCase()}`);
+    }
+  };
 
   return (
     <div className="lobby-screen">
@@ -20,28 +28,38 @@ export default function ChannelLobby({ username, onJoinChannel }) {
         </div>
       </div>
       
-      <div style={{ padding: '1rem', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-        <div style={{ position: 'relative' }}>
-          <Search size={18} style={{position:'absolute', top:'50%', transform:'translateY(-50%)', left:'1rem', color:'var(--text-muted)'}} />
-          <input 
-            className="form-input" 
-            placeholder="Cari ruas atau saluran..."
-            style={{ marginBottom: 0, paddingLeft: '2.5rem', borderRadius: '30px', background: 'var(--bg-tertiary)' }}
-          />
-        </div>
-        
-        {/* Instant Meeting Button! */}
+      {/* Zoom-style Meeting Panel */}
+      <h3 className="section-title" style={{marginTop: '1rem'}}>HD VIDEO MEETING</h3>
+      <div className="meeting-panel" style={{ padding: '1rem', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: '0.8rem', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
         <button 
           onClick={() => {
-            const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
             onJoinChannel(`MEETING-${randomCode}`);
           }}
-          style={{ width: '100%', padding: '0.8rem', background: '#0e1111', color: 'white', borderRadius: '12px', border: '1px solid var(--accent-secondary)', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-          📹 Buat Rapat HD Dadakan
+          className="btn-create-meeting"
+          style={{ width: '100%', padding: '0.9rem', background: '#0e1111', color: 'white', borderRadius: '12px', border: '1px solid #333', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
+          <Video size={20} color="var(--accent-secondary)" /> Buat Rapat Baru
         </button>
+
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <input 
+            className="form-input" 
+            placeholder="Ketik Kunci ID Rapat..."
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            style={{ marginBottom: 0, flex: 1, borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', textTransform: 'uppercase' }}
+          />
+          <button 
+            onClick={handleJoinMeeting}
+            disabled={!joinCode.trim()}
+            style={{ padding: '0 1rem', background: joinCode.trim() ? 'var(--accent)' : 'gray', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+            Gabung
+          </button>
+        </div>
       </div>
 
-      <h3 className="section-title">Saluran Ruas Tol HKA</h3>
+      {/* Legacy Walkie Talkie Channels */}
+      <h3 className="section-title">RADIO PTT: SALURAN TETAP</h3>
       <div style={{ background: 'var(--bg-secondary)', borderTop: '1px solid var(--border)' }}>
         {hkaChannels.map(ch => (
           <div key={ch.id} className="channel-card" onClick={() => onJoinChannel(ch.id)}>
@@ -50,7 +68,7 @@ export default function ChannelLobby({ username, onJoinChannel }) {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-main)' }}>{ch.name}</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Klik untuk sambung</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Ketuk untuk menyiarkan</div>
             </div>
           </div>
         ))}
