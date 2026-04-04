@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
+import { Radio, MessageSquare, User } from 'lucide-react';
 import './index.css';
 import ChannelLobby from './components/ChannelLobby';
 import TalkScreen from './components/TalkScreen';
@@ -107,7 +108,6 @@ export default function App() {
   const startRecording = async () => {
     if (isRecordingRef.current) return;
     
-    // Aggressive Anti-Feedback Hardware Mute (Instant!)
     setSpeakerMute(true); 
 
     const ctx = initAudioContext();
@@ -138,6 +138,17 @@ export default function App() {
       scriptNode.onaudioprocess = (e) => {
         if (!isRecordingRef.current) return;
         const float32Array = e.inputBuffer.getChannelData(0);
+        
+        let rms = 0;
+        for (let i = 0; i < float32Array.length; i++) {
+          rms += float32Array[i] * float32Array[i];
+        }
+        rms = Math.sqrt(rms / float32Array.length);
+        
+        if (rms < 0.03) {
+          return; 
+        }
+
         const int16Array = new Int16Array(float32Array.length);
         for (let i = 0; i < float32Array.length; i++) {
           int16Array[i] = Math.max(-1, Math.min(1, float32Array[i])) * 0x7FFF;
@@ -175,7 +186,6 @@ export default function App() {
       mediaStreamSource = null;
     }
     
-    // Crucial: Restore Audio 300ms AFTER release to ensure 0 tail-resonance feedback crossover
     setTimeout(() => { setSpeakerMute(false); }, 300);
   };
 
@@ -191,52 +201,67 @@ export default function App() {
     if (username.trim()) setNavState('lobby');
   };
 
-  const handleJoinChannel = (ch) => {
+  const joinChannel = (ch) => {
     setChannel(ch);
     setMessages([]); 
     setNavState('talk');
   };
 
-  const handleLeaveChannel = () => {
+  const leaveChannel = () => {
     setNavState('lobby');
     setChannel('');
     if (socket) socket.disconnect();
     setSocket(null);
   };
 
-  if (navState === 'login') {
-    return (
-      <div className="auth-container">
-        <h1>HKA<span style={{color: 'white'}}>Talk</span></h1>
-        <form onSubmit={handleLogin} style={{width: '100%', maxWidth: '300px'}}>
-          <input className="form-input" required placeholder="Enter Callsign..." value={username} onChange={e=>setUsername(e.target.value)} />
-          <button type="submit" className="btn-primary">Sign In</button>
-        </form>
-      </div>
-    );
-  }
-
   return (
     <div className="app-container">
-      {navState === 'lobby' && (
-         <ChannelLobby 
-           username={username} 
-           onJoinChannel={handleJoinChannel} 
-           onLogout={() => { setNavState('login'); setUsername(''); }} 
-         />
+      {navState === 'login' && (
+        <div className="auth-container">
+          <h1>Si Talki</h1>
+          <div className="auth-subtitle">Sistem Komunikasi Cerdas Anti-Feedback</div>
+          <form style={{ width: '100%' }} onSubmit={handleLogin}>
+            <input 
+              className="form-input"
+              placeholder="Masukkan Callsign / Nama" 
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoFocus
+            />
+            <button type="submit" className="btn-primary" disabled={!username.trim()}>
+              Masuk Saluran
+            </button>
+          </form>
+        </div>
       )}
+
+      {navState === 'lobby' && (
+        <ChannelLobby 
+          username={username} 
+          onJoinChannel={joinChannel} 
+        />
+      )}
+
       {navState === 'talk' && (
-         <TalkScreen 
-           channel={channel} 
-           participants={participants}
-           activeSpeaker={activeSpeaker}
-           messages={messages}
-           isRecording={isRecording}
-           onStartPTT={startRecording}
-           onStopPTT={stopRecording}
-           onSendMessage={handleSendMessage}
-           onLeave={handleLeaveChannel}
-         />
+        <TalkScreen 
+          channel={channel}
+          onLeave={leaveChannel}
+          participants={participants}
+          activeSpeaker={activeSpeaker}
+          messages={messages}
+          onSendMessage={handleSendMessage}
+          onStartPTT={startRecording}
+          onStopPTT={stopRecording}
+          isRecording={isRecording}
+        />
+      )}
+      
+      {navState !== 'login' && (
+        <div className="bottom-nav">
+          <div className="nav-item active"><Radio size={22} /> Saluran</div>
+          <div className="nav-item"><MessageSquare size={22} /> Pesan</div>
+          <div className="nav-item" onClick={() => setNavState('login')}><User size={22} /> Logout</div>
+        </div>
       )}
     </div>
   );

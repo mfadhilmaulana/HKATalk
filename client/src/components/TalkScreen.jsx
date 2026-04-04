@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Mic, Send } from 'lucide-react';
+import { ChevronLeft, Mic, Send, Radio } from 'lucide-react';
 
 export default function TalkScreen({ 
   channel, 
@@ -31,18 +31,22 @@ export default function TalkScreen({
     <div className="talk-screen">
       <div className="zello-header">
         <button className="zello-header-back" onClick={onLeave}>
-          <ChevronLeft size={24} /> Back
+          <ChevronLeft size={24} />
         </button>
-        <h1>#{channel}</h1>
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-           {participants.length} Online
+        <div style={{ textAlign: 'center', flex: 1 }}>
+          <h1 style={{fontSize: '1.1rem'}}>{channel.toUpperCase()}</h1>
+          <div className="subtitle">
+            <Radio size={10} style={{marginRight: '2px'}} /> {participants.length} Active Node
+          </div>
         </div>
+        <div style={{width: '24px'}}></div>
       </div>
 
       <div className="chat-history">
-        <div style={{ textAlign: 'center', margin: '2rem 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          Welcome to #{channel}
+        <div style={{ textAlign: 'center', margin: '1rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', background: 'rgba(0,0,0,0.05)', padding: '4px', borderRadius: '12px', alignSelf: 'center' }}>
+          Jaringan Terenkripsi & Anti-Feedback
         </div>
+        
         {messages.map((msg, idx) => (
           <div key={idx} className={`message-row ${msg.self ? 'self' : 'other'}`}>
             {!msg.self && <div className="message-sender">{msg.username}</div>}
@@ -60,11 +64,11 @@ export default function TalkScreen({
       <form className="chat-input-bar" onSubmit={handleSend}>
         <input 
           className="chat-input" 
-          placeholder="Send text message..." 
+          placeholder="Ketik Laporan..." 
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <button type="submit" className="chat-send-btn">
+        <button type="submit" className="chat-send-btn" disabled={!text.trim()}>
           <Send size={18} />
         </button>
       </form>
@@ -73,7 +77,7 @@ export default function TalkScreen({
         <div className="ptt-wrapper">
           {activeSpeaker && !isRecording && (
             <div className="receiving-indicator">
-              Receiving: {activeSpeaker}
+              MENERIMA SUARA: {activeSpeaker.toUpperCase()}
             </div>
           )}
           <button 
@@ -86,7 +90,7 @@ export default function TalkScreen({
             onTouchCancel={(e) => { e.preventDefault(); onStopPTT(); }}
             onContextMenu={(e) => e.preventDefault()}
           >
-            <Mic size={56} color="var(--bg-primary)" />
+            <Mic size={54} color={isRecording ? 'black' : 'white'} />
           </button>
         </div>
       </div>

@@ -1,47 +1,46 @@
-import React, { useState } from 'react';
-import { Users, LogOut, Radio } from 'lucide-react';
+import React from 'react';
+import { Route, Search } from 'lucide-react';
 
-export default function ChannelLobby({ username, onJoinChannel, onLogout }) {
-  const [channelInput, setChannelInput] = useState('');
-  
-  const suggestedChannels = ['general', 'emergency', 'family'];
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (channelInput.trim()) {
-      onJoinChannel(channelInput.trim());
-    }
-  };
+export default function ChannelLobby({ username, onJoinChannel }) {
+  const hkaChannels = [
+    { id: 'bakter', name: 'Tol Bakauheni - Terbanggi Besar' },
+    { id: 'terpeka', name: 'Tol Terbanggi B. - P. Panggang' },
+    { id: 'palindra', name: 'Tol Palembang - Indralaya' },
+    { id: 'permai', name: 'Tol Pekanbaru - Dumai' },
+    { id: 'jorrs', name: 'Tol JORR-S' },
+    { id: 'pusat', name: 'Pusat Komando (Puskodal)' }
+  ];
 
   return (
     <div className="lobby-screen">
       <div className="zello-header">
-        <h1>{username}'s Channels</h1>
-        <button className="zello-header-back" onClick={onLogout}>
-          <LogOut size={18} /> Logout
-        </button>
+        <div>
+          <h1>Si Talki</h1>
+          <div className="subtitle">ID: {username}</div>
+        </div>
       </div>
       
-      <form onSubmit={handleSubmit} style={{ padding: '1rem' }}>
-        <input 
-          className="form-input" 
-          placeholder="Enter a channel name to join..." 
-          value={channelInput}
-          onChange={(e) => setChannelInput(e.target.value)}
-        />
-        <button type="submit" className="btn-primary">Add / Join</button>
-      </form>
+      <div style={{ padding: '1rem', background: 'var(--bg-secondary)' }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={18} style={{position:'absolute', top:'50%', transform:'translateY(-50%)', left:'1rem', color:'var(--text-muted)'}} />
+          <input 
+            className="form-input" 
+            placeholder="Cari ruas atau saluran..."
+            style={{ marginBottom: 0, paddingLeft: '2.5rem', borderRadius: '30px', background: 'var(--bg-tertiary)' }}
+          />
+        </div>
+      </div>
 
-      <div style={{ padding: '0 1rem' }}>
-        <h3 className="section-title">Suggested Channels</h3>
-        {suggestedChannels.map(ch => (
-          <div key={ch} className="channel-card" onClick={() => onJoinChannel(ch)}>
+      <h3 className="section-title">Saluran Ruas Tol HKA</h3>
+      <div style={{ background: 'var(--bg-secondary)', borderTop: '1px solid var(--border)' }}>
+        {hkaChannels.map(ch => (
+          <div key={ch.id} className="channel-card" onClick={() => onJoinChannel(ch.id)}>
             <div className="channel-icon">
-              <Radio size={24} />
+              <Route size={22} />
             </div>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>#{ch}</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tap to connect</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-main)' }}>{ch.name}</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Klik untuk sambung</div>
             </div>
           </div>
         ))}
