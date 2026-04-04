@@ -110,9 +110,13 @@ export default function ChatScreen({ messages, onSendMessage }) {
         <div ref={chatEndRef} />
       </div>
 
-      <form className="chat-input-bar" onSubmit={handleSendText} style={{ paddingBottom: '70px', zIndex: 10 }}>
+      <form 
+        className="chat-input-bar" 
+        onSubmit={handleSendText} 
+        style={{ paddingBottom: 'max(75px, env(safe-area-inset-bottom))', zIndex: 50, position: 'relative', marginTop: 'auto' }}
+      >
         <button type="button" className="chat-action-btn" onClick={() => fileInputRef.current?.click()}>
-          <Camera size={20} />
+          <Camera size={24} />
           <input 
             type="file" 
             accept="image/*" 
@@ -123,18 +127,18 @@ export default function ChatScreen({ messages, onSendMessage }) {
           />
         </button>
         <button type="button" className="chat-action-btn" onClick={handleLocation}>
-          <MapPin size={20} />
+          <MapPin size={24} />
         </button>
 
         <input 
           className="chat-input" 
-          placeholder="Ketik Laporan..." 
+          placeholder="Ketik Pesan..." 
           value={text}
-          onKeyDown={(e) => { if(e.key === 'Enter') handleSendText(e); }}
           onChange={(e) => setText(e.target.value)}
+          autoComplete="off"
         />
-        <button type="submit" className="chat-send-btn" disabled={!text.trim()} style={{background: 'var(--accent)', width: '40px', height:'40px', borderRadius: '50%'}}>
-          <Send size={18} color="white" />
+        <button type="submit" className="chat-send-btn" disabled={!text.trim()} style={{background: text.trim() ? '#25d366' : 'var(--text-muted)', width: '45px', height:'45px', borderRadius: '50%', border: 'none'}}>
+          <Send size={20} color="white" />
         </button>
       </form>
     </div>
