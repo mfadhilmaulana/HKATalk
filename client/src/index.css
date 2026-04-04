@@ -259,7 +259,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 0.7rem 1rem;
-  color: var(--text-main);
+  color: #111;
   outline: none;
 }
 

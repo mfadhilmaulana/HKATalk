@@ -47,7 +47,7 @@ export default function ChannelLobby({ username, onJoinChannel, activeRadio, onP
             placeholder="Ketik Kunci ID Rapat..."
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value)}
-            style={{ marginBottom: 0, flex: 1, borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', textTransform: 'uppercase' }}
+            style={{ marginBottom: 0, flex: 1, borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-tertiary)', color: '#111', textTransform: 'uppercase' }}
           />
           <button 
             onClick={handleJoinMeeting}
