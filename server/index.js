@@ -28,9 +28,16 @@ io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   socket.on('join-channel', ({ channel, username }) => {
-    // Leave previous rooms
+    // Leave previous rooms & gracefully clean memory
     Array.from(socket.rooms).forEach(room => {
-      if (room !== socket.id) socket.leave(room);
+      if (room !== socket.id) {
+        socket.leave(room);
+        if (channels[room]) {
+          channels[room].delete(socket.id);
+        }
+        // Emit user-left so old participants know this socket physically left that channel
+        socket.to(room).emit('user-left', { id: socket.id, username: socket.data?.username || 'Unknown' });
+      }
     });
 
     socket.join(channel);

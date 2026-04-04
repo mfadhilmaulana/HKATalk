@@ -1,11 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PhoneOff, Video, Mic, MicOff, VideoOff, PhoneCall } from 'lucide-react';
 
-// ICE servers for NAT traversal
+// ICE servers for NAT traversal (STUN + Public TURN for Symmetric NAT/4G)
 const iceServers = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
   ]
 };
 
@@ -114,6 +124,19 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
         }
         return prev;
       });
+    };
+
+    // GHOST KILLER: Immediately clear participants if their P2P connection physically drops
+    pc.onconnectionstatechange = () => {
+      if (
+        pc.connectionState === 'disconnected' || 
+        pc.connectionState === 'failed' || 
+        pc.connectionState === 'closed'
+      ) {
+        pc.close();
+        if (connectionsRef.current[targetId]) delete connectionsRef.current[targetId];
+        setPeers(prev => prev.filter(p => p.id !== targetId));
+      }
     };
 
     if (isInitiator) {
