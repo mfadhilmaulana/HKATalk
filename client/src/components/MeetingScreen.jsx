@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { PhoneOff, Video, Mic, MicOff, VideoOff, PhoneCall } from 'lucide-react';
+import { PhoneOff, Video, Mic, MicOff, VideoOff, PhoneCall, MonitorUp } from 'lucide-react';
 
 // ICE servers for NAT traversal (STUN + Public TURN for Symmetric NAT/4G)
 const iceServers = {
@@ -149,6 +149,8 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
     return pc;
   };
 
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+
   const toggleMic = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach(t => t.enabled = !t.enabled);
@@ -160,6 +162,46 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
     if (localStreamRef.current) {
       localStreamRef.current.getVideoTracks().forEach(t => t.enabled = !t.enabled);
       setCamState(!camState);
+    }
+  };
+
+  const toggleScreenShare = async () => {
+    if (isScreenSharing) {
+      // Revert to Webcam
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      Object.values(connectionsRef.current).forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender && videoTrack) sender.replaceTrack(videoTrack);
+      });
+      if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+      setIsScreenSharing(false);
+    } else {
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenTrack = screenStream.getVideoTracks()[0];
+        
+        screenTrack.onended = () => {
+          // Triggered when user physically stops sharing via Chrome top-bar
+          const videoTrack = localStreamRef.current.getVideoTracks()[0];
+          Object.values(connectionsRef.current).forEach(pc => {
+            const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender && videoTrack) sender.replaceTrack(videoTrack);
+          });
+          if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+          setIsScreenSharing(false);
+        };
+
+        // Live inject screen-track into all active Mesh Peers
+        Object.values(connectionsRef.current).forEach(pc => {
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) sender.replaceTrack(screenTrack);
+        });
+        
+        if (localVideoRef.current) localVideoRef.current.srcObject = screenStream;
+        setIsScreenSharing(true);
+      } catch (err) {
+        console.warn("Screen share cancelled", err);
+      }
     }
   };
 
@@ -192,6 +234,9 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
         </button>
         <button onClick={toggleCam} style={{ background: camState ? '#333' : 'var(--accent)', color: 'white', border: 'none', borderRadius: '50%', width:'50px', height:'50px', display:'flex', alignItems:'center', justifyContent:'center' }}>
           {camState ? <Video /> : <VideoOff />}
+        </button>
+        <button onClick={toggleScreenShare} style={{ background: isScreenSharing ? '#25d366' : '#333', color: 'white', border: 'none', borderRadius: '50%', width:'50px', height:'50px', display:'flex', alignItems:'center', justifyContent:'center', transition: '0.2s', boxShadow: isScreenSharing ? '0 0 15px #25d366' : 'none' }}>
+          <MonitorUp />
         </button>
         <button onClick={onLeave} style={{ background: 'red', color: 'white', border: 'none', borderRadius: '50%', width:'50px', height:'50px', display:'flex', alignItems:'center', justifyContent:'center' }}>
           <PhoneOff />
