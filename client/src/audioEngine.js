@@ -1,19 +1,32 @@
 export const AUDIO_SAMPLE_RATE = 16000;
 let audioContext = null;
+let masterGainNode = null;
 
 export function initAudioContext() {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: AUDIO_SAMPLE_RATE });
+    masterGainNode = audioContext.createGain();
+    masterGainNode.connect(audioContext.destination);
   }
   return audioContext;
+}
+
+export function setSpeakerMute(isMuted) {
+  if (masterGainNode && audioContext) {
+    // 0 = Hardcore Instant Mute anti-feedback, 1 = normal volume
+    masterGainNode.gain.setValueAtTime(isMuted ? 0 : 1.0, audioContext.currentTime);
+  }
 }
 
 export function playZelloBeep(type) {
   const ctx = initAudioContext();
   const t = ctx.currentTime;
   
+  // Beeps connect bypass the masterGainNode straight to destination
+  // So you still hear your own beeps even when the network channel is muted
+  const destination = ctx.destination;
+  
   if (type === 'start') {
-    // Sharp modern start chirp (Zello style rising tones)
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
@@ -27,11 +40,10 @@ export function playZelloBeep(type) {
     gain.gain.linearRampToValueAtTime(0, t + 0.1);
     
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(destination);
     osc.start(t);
     osc.stop(t + 0.1);
   } else if (type === 'end') {
-    // Clean end pop/chirp for release
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
@@ -42,22 +54,19 @@ export function playZelloBeep(type) {
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
     
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(destination);
     osc.start(t);
     osc.stop(t + 0.1);
   }
 }
 
-// Creates the audio processing chain for incoming audio to make it extremely clear ("terang")
 export function createReceiverChain() {
   const ctx = initAudioContext();
   
-  // Cut low rumbles so it doesn't sound muffled
   const highpass = ctx.createBiquadFilter();
   highpass.type = 'highpass';
   highpass.frequency.value = 250; 
   
-  // Boost the high-end treble for maximum vocal clarity
   const highshelf = ctx.createBiquadFilter();
   highshelf.type = 'highshelf';
   highshelf.frequency.value = 2500;
@@ -72,7 +81,10 @@ export function createReceiverChain() {
 
   highpass.connect(highshelf);
   highshelf.connect(compressor);
-  compressor.connect(ctx.destination);
+  
+  // CRITICAL: Connect to masterGainNode, not destination.
+  // This allows the entire incoming voice channel to be forcefully muted when PTT is pressed.
+  compressor.connect(masterGainNode);
   
   return { input: highpass };
 }

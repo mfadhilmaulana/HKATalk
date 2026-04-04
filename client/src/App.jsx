@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import './index.css';
 import ChannelLobby from './components/ChannelLobby';
 import TalkScreen from './components/TalkScreen';
-import { initAudioContext, playZelloBeep, createReceiverChain, AUDIO_SAMPLE_RATE } from './audioEngine';
+import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, AUDIO_SAMPLE_RATE } from './audioEngine';
 
 let mediaStreamSource = null;
 let scriptNode = null;
@@ -107,6 +107,9 @@ export default function App() {
   const startRecording = async () => {
     if (isRecordingRef.current) return;
     
+    // Aggressive Anti-Feedback Hardware Mute (Instant!)
+    setSpeakerMute(true); 
+
     const ctx = initAudioContext();
     if (ctx.state === 'suspended') await ctx.resume();
     
@@ -117,15 +120,17 @@ export default function App() {
     if (socket) socket.emit('audio-stream', { type: 'start' });
 
     try {
-      globalStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          echoCancellation: true, 
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: AUDIO_SAMPLE_RATE,
-          channelCount: 1
-        } 
-      });
+      if (!globalStream) {
+        globalStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: { 
+            echoCancellation: true, 
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: AUDIO_SAMPLE_RATE,
+            channelCount: 1
+          } 
+        });
+      }
       
       mediaStreamSource = ctx.createMediaStreamSource(globalStream);
       scriptNode = ctx.createScriptProcessor(4096, 1, 1);
@@ -169,10 +174,9 @@ export default function App() {
       mediaStreamSource.disconnect();
       mediaStreamSource = null;
     }
-    if (globalStream) {
-      globalStream.getTracks().forEach(track => track.stop());
-      globalStream = null;
-    }
+    
+    // Crucial: Restore Audio 300ms AFTER release to ensure 0 tail-resonance feedback crossover
+    setTimeout(() => { setSpeakerMute(false); }, 300);
   };
 
   const handleSendMessage = (text) => {
