@@ -20,7 +20,7 @@ export default function ChannelLobby({ username, onJoinChannel }) {
         </div>
       </div>
       
-      <div style={{ padding: '1rem', background: 'var(--bg-secondary)' }}>
+      <div style={{ padding: '1rem', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
         <div style={{ position: 'relative' }}>
           <Search size={18} style={{position:'absolute', top:'50%', transform:'translateY(-50%)', left:'1rem', color:'var(--text-muted)'}} />
           <input 
@@ -29,6 +29,16 @@ export default function ChannelLobby({ username, onJoinChannel }) {
             style={{ marginBottom: 0, paddingLeft: '2.5rem', borderRadius: '30px', background: 'var(--bg-tertiary)' }}
           />
         </div>
+        
+        {/* Instant Meeting Button! */}
+        <button 
+          onClick={() => {
+            const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+            onJoinChannel(`MEETING-${randomCode}`);
+          }}
+          style={{ width: '100%', padding: '0.8rem', background: '#0e1111', color: 'white', borderRadius: '12px', border: '1px solid var(--accent-secondary)', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          📹 Buat Rapat HD Dadakan
+        </button>
       </div>
 
       <h3 className="section-title">Saluran Ruas Tol HKA</h3>

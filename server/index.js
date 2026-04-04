@@ -56,6 +56,25 @@ io.on('connection', (socket) => {
     socket.emit('channel-info', { channel, participants });
   });
 
+  // WebRTC Signals
+  socket.on('webrtc-offer', (data) => {
+    socket.to(data.target).emit('webrtc-offer', { ...data, senderId: socket.id, username: socket.data.username });
+  });
+
+  socket.on('webrtc-answer', (data) => {
+    socket.to(data.target).emit('webrtc-answer', { ...data, senderId: socket.id });
+  });
+
+  socket.on('webrtc-ice-candidate', (data) => {
+    socket.to(data.target).emit('webrtc-ice-candidate', { ...data, senderId: socket.id });
+  });
+
+  socket.on('sos-alert', () => {
+    if (socket.data.channel) {
+      socket.to(socket.data.channel).emit('sos-alert', { username: socket.data.username });
+    }
+  });
+
   socket.on('audio-stream', (audioData) => {
     // Broadcast the audio chunk to all other users in the same room using binary streaming
     if (socket.data.channel) {

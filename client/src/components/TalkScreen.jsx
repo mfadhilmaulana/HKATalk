@@ -12,6 +12,7 @@ export default function TalkScreen({
   localVideoRef,
   onStartPTT,
   onStopPTT,
+  onSOS,
   isRecording
 }) {
 
@@ -54,9 +55,16 @@ export default function TalkScreen({
 
       <div className="ptt-area" style={{ position: 'relative' }}>
 
+        {/* SOS Alarm Button */}
+        <button 
+          onClick={onSOS}
+          style={{ position:'absolute', top: '10px', left: '20px', background: 'red', color: 'white', border: '2px solid darkred', borderRadius: '50%', width:'55px', height:'55px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 20px rgba(255,0,0,0.6)', cursor:'pointer', zIndex: 10, fontWeight: 'bold', fontSize: '0.9rem' }}>
+          SOS
+        </button>
+
         <button 
           onClick={toggleVideo}
-          style={{ position:'absolute', top: '-25px', right: '20px', background: isVideoEnabled ? 'var(--accent)' : 'white', color: isVideoEnabled ? 'white' : 'gray', border: '1px solid var(--border)', borderRadius: '50%', width:'50px', height:'50px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 10px rgba(0,0,0,0.1)', cursor:'pointer', zIndex: 10 }}>
+          style={{ position:'absolute', top: '10px', right: '20px', background: isVideoEnabled ? 'var(--accent)' : 'white', color: isVideoEnabled ? 'white' : 'gray', border: '1px solid var(--border)', borderRadius: '50%', width:'50px', height:'50px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 10px rgba(0,0,0,0.1)', cursor:'pointer', zIndex: 10 }}>
           {isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
         </button>
 

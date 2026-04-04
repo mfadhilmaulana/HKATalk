@@ -5,7 +5,8 @@ import './index.css';
 import ChannelLobby from './components/ChannelLobby';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
-import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, AUDIO_SAMPLE_RATE } from './audioEngine';
+import MeetingScreen from './components/MeetingScreen';
+import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, AUDIO_SAMPLE_RATE } from './audioEngine';
 
 let mediaStreamSource = null;
 let scriptNode = null;
@@ -73,6 +74,11 @@ export default function App() {
     newSocket.on('video-frame', (data) => {
       // Show frame if it corresponds to the active speaker
       setActiveFrame(data.frame);
+    });
+
+    newSocket.on('sos-alert', (data) => {
+      setMessages(prev => [...prev, { text: `🚨 DARURAT: ${data.username} MENEKAN TOMBOL SOS!`, type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
+      playSiren();
     });
 
     newSocket.on('audio-stream', (payload) => {
@@ -278,6 +284,13 @@ export default function App() {
     setNavState('talk');
   };
 
+  const handleSOS = () => {
+    if (socket) socket.emit('sos-alert');
+    playSiren();
+    const packet = { text: `🚨 SAYA MENEKAN TOMBOL SOS!`, type: 'text', self: true, username, timestamp: new Date().toISOString() };
+    setMessages(prev => [...prev, packet]);
+  };
+
   const leaveChannel = () => {
     setNavState('lobby');
     setChannel('');
@@ -321,7 +334,16 @@ export default function App() {
         />
       )}
 
-      {navState === 'talk' && (
+      {navState === 'talk' && channel.startsWith('MEETING-') && (
+        <MeetingScreen 
+          roomCode={channel.split('-')[1]} 
+          username={username} 
+          socket={socket} 
+          onLeave={leaveChannel} 
+        />
+      )}
+
+      {navState === 'talk' && !channel.startsWith('MEETING-') && (
         <TalkScreen 
           channel={channel}
           onLeave={leaveChannel}
@@ -333,6 +355,7 @@ export default function App() {
           localVideoRef={localVideoRef}
           onStartPTT={startRecording}
           onStopPTT={stopRecording}
+          onSOS={handleSOS}
           isRecording={isRecording}
         />
       )}

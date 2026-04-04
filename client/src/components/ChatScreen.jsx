@@ -110,7 +110,7 @@ export default function ChatScreen({ messages, onSendMessage }) {
         <div ref={chatEndRef} />
       </div>
 
-      <form className="chat-input-bar" onSubmit={handleSendText}>
+      <form className="chat-input-bar" onSubmit={handleSendText} style={{ paddingBottom: '70px', zIndex: 10 }}>
         <button type="button" className="chat-action-btn" onClick={() => fileInputRef.current?.click()}>
           <Camera size={20} />
           <input 
@@ -130,6 +130,7 @@ export default function ChatScreen({ messages, onSendMessage }) {
           className="chat-input" 
           placeholder="Ketik Laporan..." 
           value={text}
+          onKeyDown={(e) => { if(e.key === 'Enter') handleSendText(e); }}
           onChange={(e) => setText(e.target.value)}
         />
         <button type="submit" className="chat-send-btn" disabled={!text.trim()} style={{background: 'var(--accent)', width: '40px', height:'40px', borderRadius: '50%'}}>
