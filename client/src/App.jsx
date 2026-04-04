@@ -15,6 +15,7 @@ let globalVideoStream = null;
 let videoInterval = null;
 let playTime = 0;
 let receiverChain = null;
+let radioPlayer = typeof Audio !== 'undefined' ? new Audio() : null;
 
 // Helper to draw video to canvas
 const captureVideoFrame = (videoElement, socket, username, channel) => {
@@ -286,10 +287,6 @@ export default function App() {
     if (!socket) return;
     
     // Transform string text to unified object model
-    let mediaStreamSource = null;
-    let scriptNode = null;
-    let globalStream = null;
-    let radioPlayer = typeof Audio !== 'undefined' ? new Audio() : null;
     const messageData = typeof payload === 'string' ? { type: 'text', text: payload } : payload;
     
     const packet = {
