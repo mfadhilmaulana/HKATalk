@@ -383,19 +383,103 @@ body {
 
 .form-input {
   width: 100%;
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem;
-  color: var(--text-main);
+  padding: 0.8rem 1rem;
   margin-bottom: 1rem;
-  font-size: 1.1rem;
-  outline: none;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #1e1e1e;
+  color: var(--text-main);
+  box-sizing: border-box;
 }
 
 .form-input:focus {
+  outline: none;
   border-color: var(--accent);
 }
+
+/* Radio FM Container */
+.radio-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.radio-tile {
+  border-radius: 12px;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 90px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  transition: transform 0.2s;
+}
+
+.radio-tile:active {
+  transform: scale(0.95);
+}
+
+.radio-tile::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.7), rgba(0,0,0,0.05));
+}
+
+.radio-info {
+  position: relative;
+  z-index: 2;
+}
+
+.radio-name {
+  color: white;
+  font-weight: bold;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.radio-freq {
+  color: rgba(255,255,255,0.8);
+  font-size: 0.75rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  margin-top: 2px;
+}
+
+.radio-tile.playing .radio-disc {
+  animation: spin 3s linear infinite;
+  display: block;
+}
+
+.radio-disc {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 25px;
+  height: 25px;
+  background: repeating-radial-gradient(#111 0, #111 2px, #333 3px, #333 4px);
+  border-radius: 50%;
+  z-index: 1;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.radio-disc::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px; height: 6px;
+  background: white;
+  border-radius: 50%;
+}
+
+@keyframes spin { 100% { transform: rotate(360deg); } }
 
 .btn-primary {
   width: 100%;

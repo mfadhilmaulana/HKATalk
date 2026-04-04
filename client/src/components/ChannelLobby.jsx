@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Route, Search, Video, LogIn } from 'lucide-react';
 
-export default function ChannelLobby({ username, onJoinChannel }) {
+export default function ChannelLobby({ username, onJoinChannel, activeRadio, onPlayRadio }) {
   const [joinCode, setJoinCode] = useState('');
 
   const hkaChannels = [
@@ -73,6 +73,26 @@ export default function ChannelLobby({ username, onJoinChannel }) {
           </div>
         ))}
       </div>
+
+      {/* Radio FM Nusantara */}
+      <h3 className="section-title" style={{marginTop: '1rem'}}>🎧 RADIO HIBURAN NASIONAL</h3>
+      <div className="radio-grid">
+        {[
+          { id: 'prambors', name: 'Prambors FM', freq: 'Jakarta', url: 'https://masima.rastream.com/masima-pramborsjakarta', color: 'linear-gradient(135deg, #FFB75E 0%, #ED8F03 100%)' },
+          { id: 'genfm', name: 'Gen FM', freq: 'Lagu Hits', url: 'https://stream.genfm.co.id/genfm', color: 'linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)' },
+          { id: 'elshinta', name: 'Elshinta Berita', freq: 'News & Info', url: 'https://rfcmedia.streamguys1.com/elshinta.mp3', color: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)' },
+          { id: 'rri', name: 'RRI Pro 3', freq: 'Nasional', url: 'https://RRI-Pro3.stream/listen', color: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)' }
+        ].map(st => (
+          <div key={st.id} className={`radio-tile ${activeRadio === st.id ? 'playing' : ''}`} style={{ background: st.color }} onClick={() => onPlayRadio(st)}>
+            <div className="radio-disc"></div>
+            <div className="radio-info">
+              <div className="radio-name">{st.name}</div>
+              <div className="radio-freq">{activeRadio === st.id ? 'Sedang Diputar 🔊' : st.freq}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{height: '80px'}}></div> {/* Padding bottom nav */}
     </div>
   );
 }

@@ -256,10 +256,40 @@ export default function App() {
     setTimeout(() => { setSpeakerMute(false); }, 300);
   };
 
+  const stopRadio = () => {
+    if (radioPlayer) {
+      radioPlayer.pause();
+      radioPlayer.currentTime = 0;
+    }
+    setActiveRadio(null);
+  };
+
+  const toggleRadio = (station) => {
+    if (!radioPlayer) return;
+    if (activeRadio === station.id) {
+      stopRadio();
+    } else {
+      radioPlayer.src = station.url;
+      let playPromise = radioPlayer.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          setActiveRadio(station.id);
+        }).catch(err => {
+          alert('Stream Radio sedang gangguan teknis. Coba stasiun lain.');
+          setActiveRadio(null);
+        });
+      }
+    }
+  };
+
   const handleSendMessage = (payload) => {
     if (!socket) return;
     
     // Transform string text to unified object model
+    let mediaStreamSource = null;
+    let scriptNode = null;
+    let globalStream = null;
+    let radioPlayer = typeof Audio !== 'undefined' ? new Audio() : null;
     const messageData = typeof payload === 'string' ? { type: 'text', text: payload } : payload;
     
     const packet = {
@@ -279,6 +309,7 @@ export default function App() {
   };
 
   const joinChannel = (ch) => {
+    stopRadio(); // PROTECTIVE MUTING: Silence the radio before entering PTT zone!
     setChannel(ch);
     setMessages([]); 
     setNavState('talk');
@@ -331,6 +362,8 @@ export default function App() {
         <ChannelLobby 
           username={username} 
           onJoinChannel={joinChannel} 
+          activeRadio={activeRadio}
+          onPlayRadio={toggleRadio}
         />
       )}
 
