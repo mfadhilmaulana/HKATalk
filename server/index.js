@@ -46,6 +46,19 @@ io.on('connection', (socket) => {
     
     if (!channels[channel]) {
       channels[channel] = new Set();
+    } else {
+      // GHOST KILLER V2 (Deduplication): Instantly terminate old ghost sockets with identical usernames
+      Array.from(channels[channel]).forEach(id => {
+        const existingSocket = io.sockets.sockets.get(id);
+        const nameA = existingSocket?.data?.username?.trim().toLowerCase();
+        const nameB = username?.trim().toLowerCase();
+        if (existingSocket && nameA === nameB && id !== socket.id) {
+           existingSocket.leave(channel);
+           channels[channel].delete(id);
+           socket.to(channel).emit('user-left', { id: id, username: existingSocket.data.username });
+           existingSocket.disconnect(true); // Terminate immediately
+        }
+      });
     }
     channels[channel].add(socket.id);
 
