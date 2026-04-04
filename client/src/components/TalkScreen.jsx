@@ -1,31 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Mic, Send, Radio } from 'lucide-react';
+import React from 'react';
+import { ChevronLeft, Mic, Radio, Video, VideoOff } from 'lucide-react';
 
 export default function TalkScreen({ 
   channel, 
   onLeave, 
   participants, 
   activeSpeaker,
-  messages,
-  onSendMessage,
+  activeFrame,
+  isVideoEnabled,
+  toggleVideo,
+  localVideoRef,
   onStartPTT,
   onStopPTT,
   isRecording
 }) {
-  const [text, setText] = useState('');
-  const chatEndRef = useRef(null);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (text.trim()) {
-      onSendMessage(text.trim());
-      setText('');
-    }
-  };
 
   return (
     <div className="talk-screen">
@@ -36,48 +24,46 @@ export default function TalkScreen({
         <div style={{ textAlign: 'center', flex: 1 }}>
           <h1 style={{fontSize: '1.1rem'}}>{channel.toUpperCase()}</h1>
           <div className="subtitle">
-            <Radio size={10} style={{marginRight: '2px'}} /> {participants.length} Active Node
+            <Radio size={10} style={{marginRight: '2px'}} /> {participants.length} Active Nodes
           </div>
         </div>
         <div style={{width: '24px'}}></div>
       </div>
 
-      <div className="chat-history">
-        <div style={{ textAlign: 'center', margin: '1rem 0', color: 'var(--text-muted)', fontSize: '0.8rem', background: 'rgba(0,0,0,0.05)', padding: '4px', borderRadius: '12px', alignSelf: 'center' }}>
-          Jaringan Terenkripsi & Anti-Feedback
-        </div>
+      <div style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
         
-        {messages.map((msg, idx) => (
-          <div key={idx} className={`message-row ${msg.self ? 'self' : 'other'}`}>
-            {!msg.self && <div className="message-sender">{msg.username}</div>}
-            <div className="message-bubble">
-              {msg.text}
-              <span className="message-time">
-                {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-              </span>
-            </div>
+        {/* Incoming PTT Video Feed */}
+        {activeSpeaker && activeFrame ? (
+          <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
+             <img src={activeFrame} alt="Incoming video frame" style={{ width: '100%', maxWidth: '300px', borderRadius: '16px', border: '2px solid var(--accent)', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }} />
           </div>
-        ))}
-        <div ref={chatEndRef} />
+        ) : (
+          <div style={{ opacity: 0.3, textAlign: 'center' }}>
+            <Radio size={80} style={{margin: '0 auto', display: 'block'}} />
+            <br />
+            Menunggu Komunikasi...
+          </div>
+        )}
+
+        {/* Local Camera Preview (Tiny) */}
+        <div style={{ position: 'absolute', top: '10px', right: '10px', width: '80px', height: '100px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', overflow: 'hidden', border: isVideoEnabled ? '2px solid var(--accent-secondary)' : 'none' }}>
+           <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', display: isVideoEnabled ? 'block' : 'none' }} />
+           {!isVideoEnabled && <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center'}}><VideoOff size={20} color="gray" /></div>}
+        </div>
       </div>
 
-      <form className="chat-input-bar" onSubmit={handleSend}>
-        <input 
-          className="chat-input" 
-          placeholder="Ketik Laporan..." 
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <button type="submit" className="chat-send-btn" disabled={!text.trim()}>
-          <Send size={18} />
-        </button>
-      </form>
+      <div className="ptt-area" style={{ position: 'relative' }}>
 
-      <div className="ptt-area">
+        <button 
+          onClick={toggleVideo}
+          style={{ position:'absolute', top: '-25px', right: '20px', background: isVideoEnabled ? 'var(--accent)' : 'white', color: isVideoEnabled ? 'white' : 'gray', border: '1px solid var(--border)', borderRadius: '50%', width:'50px', height:'50px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 10px rgba(0,0,0,0.1)', cursor:'pointer', zIndex: 10 }}>
+          {isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+        </button>
+
         <div className="ptt-wrapper">
           {activeSpeaker && !isRecording && (
             <div className="receiving-indicator">
-              MENERIMA SUARA: {activeSpeaker.toUpperCase()}
+              MENERIMA: {activeSpeaker.toUpperCase()}
             </div>
           )}
           <button 

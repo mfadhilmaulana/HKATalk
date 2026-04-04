@@ -67,6 +67,17 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('video-frame', (data) => {
+    if (socket.data.channel) {
+      // Relay compressed JPEG frame to everyone else in the channel
+      socket.to(socket.data.channel).emit('video-frame', {
+        username: socket.data.username,
+        frame: data.frame,
+        id: socket.id
+      });
+    }
+  });
+
   socket.on('chat-message', (data) => {
     if (socket.data.channel) {
       socket.to(socket.data.channel).emit('chat-message', {

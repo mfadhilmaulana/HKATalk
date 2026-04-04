@@ -1,16 +1,31 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { Radio, MessageSquare, User } from 'lucide-react';
+import { Radio, MessageSquare, User, Camera as CameraIcon } from 'lucide-react';
 import './index.css';
 import ChannelLobby from './components/ChannelLobby';
 import TalkScreen from './components/TalkScreen';
+import ChatScreen from './components/ChatScreen';
 import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, AUDIO_SAMPLE_RATE } from './audioEngine';
 
 let mediaStreamSource = null;
 let scriptNode = null;
 let globalStream = null;
+let globalVideoStream = null;
+let videoInterval = null;
 let playTime = 0;
 let receiverChain = null;
+
+// Helper to draw video to canvas
+const captureVideoFrame = (videoElement, socket, username, channel) => {
+  if (!videoElement || videoElement.readyState !== videoElement.HAVE_ENOUGH_DATA) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = 160; 
+  canvas.height = 120; // super low res to avoid crashing server
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+  const frame = canvas.toDataURL('image/jpeg', 0.4);
+  if (socket) socket.emit('video-frame', { frame });
+};
 
 export default function App() {
   const [navState, setNavState] = useState('login'); 
@@ -22,11 +37,16 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   
+  const [isVideoEnabled, setIsVideoEnabled] = useState(false);
+  const [activeFrame, setActiveFrame] = useState(null);
+  const localVideoRef = useRef(null);
+
   const [messages, setMessages] = useState([]);
   const isRecordingRef = useRef(false);
 
   useEffect(() => {
-    if (!username || !channel || navState !== 'talk') return;
+    if (!username || !channel || (navState !== 'talk' && navState !== 'chat')) return;
+    if (socket) return; // Prevent double connections if already active
 
     initAudioContext().resume();
     
@@ -39,7 +59,7 @@ export default function App() {
 
     newSocket.on('connect', () => {
       newSocket.emit('join-channel', { username, channel });
-      setMessages(prev => [...prev, { text: `Joined channel #${channel}`, self: false, username: 'System', timestamp: new Date().toISOString() }]);
+      setMessages(prev => [...prev, { text: `Tergabung di saluran: ${channel}`, type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
     });
 
     newSocket.on('channel-info', ({ participants }) => setParticipants(participants));
@@ -50,11 +70,17 @@ export default function App() {
        setMessages(prev => [...prev, { ...data, self: false }]);
     });
 
+    newSocket.on('video-frame', (data) => {
+      // Show frame if it corresponds to the active speaker
+      setActiveFrame(data.frame);
+    });
+
     newSocket.on('audio-stream', (payload) => {
       const data = payload.audioData;
       
       if (data.type === 'start') {
         setActiveSpeaker(payload.username);
+        setActiveFrame(null); // Clear old frame
         if (!isRecordingRef.current) {
           playZelloBeep('start');
           playTime = initAudioContext().currentTime + 0.1; 
@@ -62,6 +88,7 @@ export default function App() {
       } 
       else if (data.type === 'end') {
         setActiveSpeaker(null);
+        setActiveFrame(null);
         if (!isRecordingRef.current) {
           playZelloBeep('end');
         }
@@ -103,6 +130,28 @@ export default function App() {
       setParticipants([]);
     };
   }, [navState, channel, username]);
+
+
+  const toggleVideo = async () => {
+    if (isVideoEnabled) {
+      if (globalVideoStream) {
+        globalVideoStream.getTracks().forEach(t => t.stop());
+        globalVideoStream = null;
+      }
+      setIsVideoEnabled(false);
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 320, height: 240 } });
+        globalVideoStream = stream;
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+        setIsVideoEnabled(true);
+      } catch (err) {
+        alert("Gagal mengakses kamera video: " + err.message);
+      }
+    }
+  };
 
 
   const startRecording = async () => {
@@ -162,6 +211,13 @@ export default function App() {
       mediaStreamSource.connect(scriptNode);
       scriptNode.connect(zeroGain);
       zeroGain.connect(ctx.destination);
+
+      // Start Video broadcast loop if Video is enabled!
+      if (isVideoEnabled && localVideoRef.current) {
+        videoInterval = setInterval(() => {
+          captureVideoFrame(localVideoRef.current, socket, username, channel);
+        }, 200); // 5 FPS
+      }
     } catch (err) {
       console.error('Error accessing microphone:', err);
       alert('Microphone access is required to talk.');
@@ -186,14 +242,29 @@ export default function App() {
       mediaStreamSource = null;
     }
     
+    if (videoInterval) {
+      clearInterval(videoInterval);
+      videoInterval = null;
+    }
+
     setTimeout(() => { setSpeakerMute(false); }, 300);
   };
 
-  const handleSendMessage = (text) => {
-    if (socket) {
-      socket.emit('chat-message', { text });
-      setMessages(prev => [...prev, { text, self: true, username, timestamp: new Date().toISOString() }]);
-    }
+  const handleSendMessage = (payload) => {
+    if (!socket) return;
+    
+    // Transform string text to unified object model
+    const messageData = typeof payload === 'string' ? { type: 'text', text: payload } : payload;
+    
+    const packet = {
+      ...messageData,
+      self: true,
+      username,
+      timestamp: new Date().toISOString()
+    };
+    
+    socket.emit('chat-message', packet);
+    setMessages(prev => [...prev, packet]);
   };
 
   const handleLogin = (e) => {
@@ -210,26 +281,34 @@ export default function App() {
   const leaveChannel = () => {
     setNavState('lobby');
     setChannel('');
-    if (socket) socket.disconnect();
-    setSocket(null);
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
+    if (globalVideoStream) {
+      globalVideoStream.getTracks().forEach(t => t.stop());
+      globalVideoStream = null;
+      setIsVideoEnabled(false);
+    }
   };
 
   return (
     <div className="app-container">
       {navState === 'login' && (
         <div className="auth-container">
-          <h1>Si Talki</h1>
-          <div className="auth-subtitle">Sistem Komunikasi Cerdas Anti-Feedback</div>
+          <h1 style={{color: 'var(--accent)', fontSize: '2.5rem', marginBottom: '4px'}}>Si Talki HKA</h1>
+          <div className="auth-subtitle" style={{fontWeight: 'bold', letterSpacing: '0.5px'}}>Komunikasi Cerdas Dengan Seluruh Insan HKA</div>
+          <br/>
           <form style={{ width: '100%' }} onSubmit={handleLogin}>
             <input 
               className="form-input"
-              placeholder="Masukkan Callsign / Nama" 
+              placeholder="Masukkan NIK / Nama Anda" 
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoFocus
             />
             <button type="submit" className="btn-primary" disabled={!username.trim()}>
-              Masuk Saluran
+              Masuk Sistem
             </button>
           </form>
         </div>
@@ -248,19 +327,41 @@ export default function App() {
           onLeave={leaveChannel}
           participants={participants}
           activeSpeaker={activeSpeaker}
-          messages={messages}
-          onSendMessage={handleSendMessage}
+          activeFrame={activeFrame}
+          isVideoEnabled={isVideoEnabled}
+          toggleVideo={toggleVideo}
+          localVideoRef={localVideoRef}
           onStartPTT={startRecording}
           onStopPTT={stopRecording}
           isRecording={isRecording}
         />
       )}
+
+      {navState === 'chat' && (
+        <ChatScreen 
+          messages={messages}
+          onSendMessage={handleSendMessage}
+        />
+      )}
       
-      {navState !== 'login' && (
+      {navState !== 'login' && navState !== 'lobby' && (
+        <div className="bottom-nav">
+          <div className={`nav-item ${navState === 'talk' ? 'active' : ''}`} onClick={() => setNavState('talk')}>
+            <Radio size={22} /> Saluran
+          </div>
+          <div className={`nav-item ${navState === 'chat' ? 'active' : ''}`} onClick={() => setNavState('chat')}>
+            <MessageSquare size={22} /> Pesan
+          </div>
+          <div className="nav-item" onClick={leaveChannel}>
+            <User size={22} /> Keluar
+          </div>
+        </div>
+      )}
+
+      {navState === 'lobby' && (
         <div className="bottom-nav">
           <div className="nav-item active"><Radio size={22} /> Saluran</div>
-          <div className="nav-item"><MessageSquare size={22} /> Pesan</div>
-          <div className="nav-item" onClick={() => setNavState('login')}><User size={22} /> Logout</div>
+          <div className="nav-item" onClick={() => setNavState('login')}><User size={22} /> Keluar</div>
         </div>
       )}
     </div>
