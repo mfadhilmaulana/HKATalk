@@ -299,7 +299,9 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
 
   // ─── CHAT CONVERSATION VIEW ───
   const isDM = activeRoom?.startsWith('DM-');
-  const roomName = isDM ? (initialRoomName || 'Chat Personal') : (activeRoom || '').replace('CHAT-','');
+  const currentConv = conversations.find(c => c.room === activeRoom);
+  const derivedPartnerName = currentConv?.partner_name || initialRoomName;
+  const roomName = isDM ? (derivedPartnerName || 'Chat Personal') : (activeRoom || '').replace('CHAT-','');
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>

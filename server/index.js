@@ -167,8 +167,12 @@ app.get('/api/conversations/:phone', async (req, res) => {
            WHEN m.room LIKE 'DM-%' THEN (
              SELECT u.display_name 
              FROM users u 
-             WHERE u.phone = REPLACE(REPLACE(m.room, 'DM-', ''), '-' || $1, '') 
-                OR u.phone = REPLACE(REPLACE(m.room, 'DM-', ''), $1 || '-', '')
+             WHERE u.phone = (
+               CASE 
+                 WHEN SPLIT_PART(m.room, '-', 2) = $1 THEN SPLIT_PART(m.room, '-', 3)
+                 ELSE SPLIT_PART(m.room, '-', 2)
+               END
+             )
              LIMIT 1
            )
            ELSE m.room
@@ -177,8 +181,12 @@ app.get('/api/conversations/:phone', async (req, res) => {
            WHEN m.room LIKE 'DM-%' THEN (
              SELECT TO_CHAR(u.last_seen, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') 
              FROM users u 
-             WHERE u.phone = REPLACE(REPLACE(m.room, 'DM-', ''), '-' || $1, '') 
-                OR u.phone = REPLACE(REPLACE(m.room, 'DM-', ''), $1 || '-', '')
+             WHERE u.phone = (
+               CASE 
+                 WHEN SPLIT_PART(m.room, '-', 2) = $1 THEN SPLIT_PART(m.room, '-', 3)
+                 ELSE SPLIT_PART(m.room, '-', 2)
+               END
+             )
              LIMIT 1
            )
            ELSE NULL
