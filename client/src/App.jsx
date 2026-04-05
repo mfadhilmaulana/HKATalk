@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { Radio, MessageSquare, Users, Video, Route, UserCircle } from 'lucide-react';
+import { Radio, MessageSquare, Users, Video, Route, UserCircle, Phone, PhoneOff, X, Check, Bell } from 'lucide-react';
 import './index.css';
 import ChannelScreen from './components/ChannelScreen';
 import ConferenceScreen from './components/ConferenceScreen';
@@ -9,6 +9,7 @@ import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
+import PersonalCallScreen from './components/PersonalCallScreen';
 import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, AUDIO_SAMPLE_RATE } from './audioEngine';
 
 let mediaStreamSource = null;
@@ -64,6 +65,8 @@ export default function App() {
   const [activeCall, setActiveCall] = useState(null); // { targetPhone, type, isCaller }
 
   const [messages, setMessages] = useState([]);
+  const [messageToast, setMessageToast] = useState(null); // { sender, text, room }
+  const [isCallingOut, setIsCallingOut] = useState(null); // { targetName, targetPhone, type }
   const isRecordingRef = useRef(false);
 
   useEffect(() => {
@@ -111,24 +114,34 @@ export default function App() {
     newSocket.on('call-accepted', (data) => {
       // Logic to actually start WebRTC or move to Meeting
       setActiveCall(prev => ({ ...prev, accepted: true }));
-    });
-
-    newSocket.on('call-rejected', () => {
-      alert('Panggilan ditolak');
-      setActiveCall(null);
+      setIsCallingOut(null);
     });
 
     newSocket.on('call-hungup', () => {
       setActiveCall(null);
       setIncomingCall(null);
+      setIsCallingOut(null);
     });
 
     newSocket.on('incoming-message-notif', (data) => {
       // In-app notification for messages
-      if (navState !== 'chat') {
-        // Show a small toast or badge (simplified for now)
-        console.log('New message from', data.senderName);
+      if (navState !== 'chat' || dmRoom !== data.room) {
+        setMessageToast(data);
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+        audio.play().catch(() => {});
+        setTimeout(() => setMessageToast(null), 5000);
       }
+    });
+
+    newSocket.on('call-rejected', () => {
+      alert('Panggilan ditolak');
+      setActiveCall(null);
+      setIsCallingOut(null);
+    });
+
+    newSocket.on('call-failed', (data) => {
+      alert(data.message);
+      setIsCallingOut(null);
     });
 
     newSocket.on('audio-stream', (payload) => {
@@ -446,15 +459,49 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Incoming Call Modal */}
+      {/* Notification Toast */}
+      {messageToast && (
+        <div 
+          onClick={() => { setDmRoom(messageToast.room); setDmName(messageToast.senderName); setNavState('chat'); setMessageToast(null); }}
+          style={{ position: 'fixed', top: 12, left: 12, right: 12, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', borderRadius: '14px', padding: '10px 14px', zIndex: 10000, display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 8px 16px rgba(0,0,0,0.15)', cursor: 'pointer', border: '1px solid var(--border)', animation: 'slideDown 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28)' }}
+        >
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#128c7e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: 800, flexShrink: 0 }}>
+            {messageToast.senderName?.[0].toUpperCase()}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#111' }}>{messageToast.senderName}</div>
+            <div style={{ fontSize: '0.75rem', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{messageToast.text}</div>
+          </div>
+          <Bell size={20} style={{ color: '#128c7e', opacity: 0.6 }} />
+        </div>
+      )}
+
+      {/* Outgoing Call UI */}
+      {isCallingOut && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', padding: '2rem' }}>
+          <div style={{ width: 100, height: 100, borderRadius: '50%', background: '#128c7e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', fontWeight: 800, marginBottom: '2rem', animation: 'pulse 1.5s infinite' }}>
+            {isCallingOut.targetName?.[0].toUpperCase()}
+          </div>
+          <h2 style={{ fontSize: '1.6rem', fontWeight: 800, marginBottom: '0.5rem' }}>{isCallingOut.targetName}</h2>
+          <p style={{ color: '#aaa', marginBottom: '4rem' }}>Memanggil ({isCallingOut.type === 'video' ? 'Video' : 'Suara'})...</p>
+          <button 
+            onClick={() => { socket?.emit('hangup-call', { targetPhone: isCallingOut.targetPhone }); setIsCallingOut(null); }}
+            style={{ width: 72, height: 72, borderRadius: '50%', background: '#ff3b30', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+          >
+            <PhoneOff size={32} />
+          </button>
+        </div>
+      )}
+
+      {/* Incoming Call Popup */}
       {incomingCall && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-          <div style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '320px', padding: '2rem', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
-            <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#128c7e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', fontSize: '2rem', fontWeight: 800 }}>
+          <div style={{ background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '320px', padding: '2rem', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', animation: 'popIn 0.4s' }}>
+            <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#128c7e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', fontSize: '2.2rem', fontWeight: 800 }}>
               {incomingCall.callerName?.[0].toUpperCase()}
             </div>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginBottom: '0.5rem' }}>{incomingCall.callerName}</h2>
-            <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '2rem' }}>Memanggil ({incomingCall.type === 'video' ? 'Video' : 'Suara'})...</p>
+            <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '2rem' }}>Panggilan {incomingCall.type === 'video' ? 'Video' : 'Suara'} Masuk...</p>
             
             <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem' }}>
               <button 
@@ -462,18 +509,17 @@ export default function App() {
                   socket?.emit('reject-call', { targetPhone: incomingCall.from });
                   setIncomingCall(null);
                 }}
-                style={{ width: 64, height: 64, borderRadius: '50%', background: '#ff3b30', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                style={{ width: 64, height: 64, borderRadius: '50%', background: '#ff3131', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,49,49,0.3)' }}
               >
                 <X size={32} />
               </button>
               <button 
                 onClick={() => {
                   socket?.emit('accept-call', { targetPhone: incomingCall.from });
-                  const roomCode = `CALL-${[userPhone, incomingCall.from].sort().join('-')}`;
+                  setActiveCall({ targetPhone: incomingCall.from, type: incomingCall.type, callerName: incomingCall.callerName, isCaller: false, accepted: true });
                   setIncomingCall(null);
-                  joinChannel(`MEETING-${roomCode}`);
                 }}
-                style={{ width: 64, height: 64, borderRadius: '50%', background: '#25d366', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                style={{ width: 64, height: 64, borderRadius: '50%', background: '#25d366', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,211,102,0.3)' }}
               >
                 {incomingCall.type === 'video' ? <Video size={32} /> : <Phone size={32} />}
               </button>
@@ -572,14 +618,14 @@ export default function App() {
           userProfile={userProfile} 
           onOpenDM={(room, name) => { setDmRoom(room); setDmName(name); setNavState('chat'); }}
           onCallContact={(c) => { 
-            const code = `CALL-${[userPhone,c.phone].sort().join('-')}`; 
+            setIsCallingOut({ targetName: c.display_name, targetPhone: c.phone, type: 'voice' });
             socket?.emit('call-user', { targetPhone: c.phone, type: 'voice', callerName: username });
-            joinChannel(`MEETING-${code}`); 
+            setActiveCall({ targetPhone: c.phone, type: 'voice', targetName: c.display_name, isCaller: true, accepted: false });
           }}
           onVideoCallContact={(c) => { 
-            const code = `VC-${[userPhone,c.phone].sort().join('-')}`; 
+            setIsCallingOut({ targetName: c.display_name, targetPhone: c.phone, type: 'video' });
             socket?.emit('call-user', { targetPhone: c.phone, type: 'video', callerName: username });
-            joinChannel(`MEETING-${code}`); 
+            setActiveCall({ targetPhone: c.phone, type: 'video', targetName: c.display_name, isCaller: true, accepted: false });
           }}
           onLogout={handleLogout} 
         />
@@ -612,7 +658,23 @@ export default function App() {
       )}
 
       {navState === 'chat' && (
-        <ChatScreen username={username} userPhone={userPhone} initialRoom={dmRoom} initialRoomName={dmName} onClearDM={() => { setDmRoom(null); setDmName(''); }} />
+        <ChatScreen 
+          username={username} 
+          userPhone={userPhone} 
+          initialRoom={dmRoom} 
+          initialRoomName={dmName} 
+          onClearDM={() => { setDmRoom(null); setDmName(''); }} 
+          onCall={(c) => {
+            setIsCallingOut({ targetName: c.display_name, targetPhone: c.phone, type: 'voice' });
+            socket?.emit('call-user', { targetPhone: c.phone, type: 'voice', callerName: username });
+            setActiveCall({ targetPhone: c.phone, type: 'voice', targetName: c.display_name, isCaller: true, accepted: false });
+          }}
+          onVideoCall={(c) => {
+            setIsCallingOut({ targetName: c.display_name, targetPhone: c.phone, type: 'video' });
+            socket?.emit('call-user', { targetPhone: c.phone, type: 'video', callerName: username });
+            setActiveCall({ targetPhone: c.phone, type: 'video', targetName: c.display_name, isCaller: true, accepted: false });
+          }}
+        />
       )}
       
       {navState !== 'login' && (
@@ -633,6 +695,20 @@ export default function App() {
             <Users size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Kontak</span>
           </div>
         </div>
+      )}
+      {/* New Personal Call Screen Integration */}
+      {activeCall && activeCall.accepted && (
+        <PersonalCallScreen 
+          callerName={activeCall.callerName || activeCall.targetName}
+          type={activeCall.type}
+          targetPhone={activeCall.targetPhone}
+          socket={socket}
+          isIncoming={!activeCall.isCaller}
+          onLeave={() => {
+             setActiveCall(null);
+             setIsCallingOut(null);
+          }}
+        />
       )}
     </div>
   );

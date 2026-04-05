@@ -9,7 +9,7 @@ function getAvatarColor(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-export default function ChatScreen({ username, userPhone, initialRoom, initialRoomName, onClearDM }) {
+export default function ChatScreen({ username, userPhone, initialRoom, initialRoomName, onClearDM, onCall, onVideoCall }) {
   const [activeRoom, setActiveRoom] = useState(initialRoom || null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -203,9 +203,25 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
           <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{isDM ? 'Aktif Sekarang' : 'Grup Terbuka'}</div>
         </div>
         {isDM && (
-          <div style={{ display: 'flex', gap: '0.4rem', marginRight: '0.4rem' }}>
-             <Phone size={18} style={{ opacity: 0.8 }} />
-             <Video size={18} style={{ opacity: 0.8 }} />
+          <div style={{ display: 'flex', gap: '0.8rem', marginRight: '0.6rem' }}>
+             <button 
+               onClick={() => {
+                 const otherPhone = activeRoom.split('-').find(p => p !== 'DM' && p !== userPhone);
+                 if (onCall) onCall({ phone: otherPhone, display_name: roomName });
+               }}
+               style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+             >
+               <Phone size={20} />
+             </button>
+             <button 
+               onClick={() => {
+                 const otherPhone = activeRoom.split('-').find(p => p !== 'DM' && p !== userPhone);
+                 if (onVideoCall) onVideoCall({ phone: otherPhone, display_name: roomName });
+               }}
+               style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+             >
+               <Video size={20} />
+             </button>
           </div>
         )}
       </div>
