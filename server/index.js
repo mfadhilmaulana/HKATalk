@@ -305,6 +305,13 @@ io.on('connection', (socket) => {
     socket.to(data.target).emit('webrtc-ice-candidate', { ...data, senderId: socket.id });
   });
 
+  socket.on('screen-share-status', (data) => {
+    // data: { status: true/false }
+    if (socket.data.channel) {
+      socket.to(socket.data.channel).emit('screen-share-status', { senderId: socket.id, status: data.status });
+    }
+  });
+
   socket.on('audio-stream', (data) => {
     if (socket.data.channel) {
       socket.to(socket.data.channel).emit('audio-stream', {
