@@ -55,6 +55,7 @@ export default function App() {
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
+  const [activeFrame, setActiveFrame] = useState(null);
   const [globalActiveSpeakers, setGlobalActiveSpeakers] = useState({});
   const [channelOccupancy, setChannelOccupancy] = useState({});
   const isRecordingRef = useRef(false);

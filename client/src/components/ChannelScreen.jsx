@@ -150,7 +150,13 @@ export default function ChannelScreen({ onJoinChannel, userProfile, activeSpeake
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <div style={{ width: 30, height: 30, borderRadius: '7px', background: isTalking ? 'var(--accent-emerald)' : (isFav ? '#d97706' : group.accent), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: (isFav || isTalking) ? 1 : 0.8, transition: 'all 0.2s' }}>
-                          {isTalking ? <Volume2 size={14} color="white" className="mic-pulse" /> : (isFav ? <Star size={12} color="white" /> : <Hash size={12} color="rgba(255,255,255,0.9)" />)}
+                          {isTalking ? (
+                            <div className="mini-equalizer">
+                              <div className="bar"></div>
+                              <div className="bar"></div>
+                              <div className="bar"></div>
+                            </div>
+                          ) : (isFav ? <Star size={12} color="white" /> : <Hash size={12} color="rgba(255,255,255,0.9)" />)}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: (isFav || isTalking) ? 700 : 500, color: isTalking ? 'var(--accent-emerald)' : 'inherit', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{chName}</div>
