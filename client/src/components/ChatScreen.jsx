@@ -145,7 +145,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
     if (conv.room.startsWith('DM-')) {
       // It's a DM, sender_name might be the OTHER person if they sent the last message
       // But we should really store the other participant's name if possible
-      return conv.sender_phone === userPhone ? 'Saya' : conv.sender_name;
+      return conv.sender_phone === userPhone ? 'Saya' : (conv.sender_name || '?');
     }
     return conv.room.replace('CHAT-', '');
   };
