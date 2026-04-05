@@ -9,7 +9,7 @@ import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
-import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, AUDIO_SAMPLE_RATE } from './audioEngine';
+import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, createMicAnalyser, clearMicAnalyser, AUDIO_SAMPLE_RATE } from './audioEngine';
 
 let mediaStreamSource = null;
 let scriptNode = null;
@@ -275,6 +275,9 @@ export default function App() {
       scriptNode.connect(zeroGain);
       zeroGain.connect(ctx.destination);
 
+      // Connect mic analyser for the audio visualizer
+      createMicAnalyser(mediaStreamSource);
+
       // Start Video broadcast loop if Video is enabled!
       if (isVideoEnabled && localVideoRef.current) {
         videoInterval = setInterval(() => {
@@ -310,6 +313,8 @@ export default function App() {
       clearInterval(videoInterval);
       videoInterval = null;
     }
+
+    clearMicAnalyser();
 
     setTimeout(() => { setSpeakerMute(false); }, 300);
   };

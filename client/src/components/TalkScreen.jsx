@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronLeft, Mic, Radio, Video, VideoOff } from 'lucide-react';
+import AudioVisualizer from './AudioVisualizer';
 
 export default function TalkScreen({ 
   channel, 
@@ -23,7 +24,7 @@ export default function TalkScreen({
           <ChevronLeft size={24} />
         </button>
         <div style={{ textAlign: 'center', flex: 1 }}>
-          <h1 style={{fontSize: '1.1rem'}}>{channel.toUpperCase()}</h1>
+          <h1 style={{fontSize: '1.1rem'}}>{(channel || '').toUpperCase()}</h1>
           <div className="subtitle">
             <Radio size={10} style={{marginRight: '2px'}} /> {participants.length} Active Nodes
           </div>
@@ -31,21 +32,30 @@ export default function TalkScreen({
         <div style={{width: '24px'}}></div>
       </div>
 
-      <div style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+      <div style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', gap: '0.5rem' }}>
         
         {/* Incoming PTT Video Feed */}
         {activeSpeaker && activeFrame ? (
-          <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
+          <div style={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1}}>
              <img src={activeFrame} alt="Incoming video frame" style={{ width: '100%', maxWidth: '320px', borderRadius: '16px', border: '2px solid var(--accent)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', imageRendering: 'auto', objectFit: 'cover' }} />
              <div style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>📹 {activeSpeaker}</div>
           </div>
         ) : (
-          <div style={{ opacity: 0.3, textAlign: 'center' }}>
-            <Radio size={80} style={{margin: '0 auto', display: 'block'}} />
-            <br />
-            Menunggu Komunikasi...
-          </div>
+          <>
+            {!isRecording && !activeSpeaker && (
+              <div style={{ opacity: 0.3, textAlign: 'center' }}>
+                <Radio size={80} style={{margin: '0 auto', display: 'block'}} />
+                <br />
+                Menunggu Komunikasi...
+              </div>
+            )}
+          </>
         )}
+
+        {/* Audio Visualizer — shows when talking or receiving */}
+        <div style={{ width: '100%', maxWidth: '340px', position: (activeSpeaker && activeFrame) ? 'relative' : 'relative' }}>
+          <AudioVisualizer isRecording={isRecording} activeSpeaker={activeSpeaker} />
+        </div>
 
         {/* Local Camera Preview (Tiny) */}
         <div style={{ position: 'absolute', top: '10px', right: '10px', width: '80px', height: '100px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', overflow: 'hidden', border: isVideoEnabled ? '2px solid var(--accent-secondary)' : 'none' }}>

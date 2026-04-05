@@ -2,6 +2,8 @@ export const AUDIO_SAMPLE_RATE = 16000;
 let audioContext = null;
 let masterGainNode = null;
 let staticNoiseNode = null;
+let receiverAnalyser = null;
+let micAnalyser = null;
 
 export function initAudioContext() {
   if (!audioContext) {
@@ -209,12 +211,47 @@ export function createReceiverChain() {
   compressor.attack.value = 0.003;
   compressor.release.value = 0.25;
 
+  // Audio Visualizer Analyser for incoming audio
+  receiverAnalyser = ctx.createAnalyser();
+  receiverAnalyser.fftSize = 64;
+  receiverAnalyser.smoothingTimeConstant = 0.75;
+
   highpass.connect(highshelf);
   highshelf.connect(compressor);
+  compressor.connect(receiverAnalyser);
   
   // CRITICAL: Connect to masterGainNode, not destination.
   // This allows the entire incoming voice channel to be forcefully muted when PTT is pressed.
-  compressor.connect(masterGainNode);
+  receiverAnalyser.connect(masterGainNode);
   
   return { input: highpass };
+}
+
+export function getReceiverAnalyser() {
+  return receiverAnalyser;
+}
+
+export function createMicAnalyser(sourceNode) {
+  const ctx = initAudioContext();
+  micAnalyser = ctx.createAnalyser();
+  micAnalyser.fftSize = 64;
+  micAnalyser.smoothingTimeConstant = 0.75;
+  sourceNode.connect(micAnalyser);
+  // Connect to a zero-gain so the analyser stays alive but produces no sound
+  const silentGain = ctx.createGain();
+  silentGain.gain.value = 0;
+  micAnalyser.connect(silentGain);
+  silentGain.connect(ctx.destination);
+  return micAnalyser;
+}
+
+export function getMicAnalyser() {
+  return micAnalyser;
+}
+
+export function clearMicAnalyser() {
+  if (micAnalyser) {
+    try { micAnalyser.disconnect(); } catch(e){}
+    micAnalyser = null;
+  }
 }
