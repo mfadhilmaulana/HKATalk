@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { Radio, MessageSquare, User, Camera as CameraIcon } from 'lucide-react';
+import { Radio, MessageSquare, Users, Video, Route } from 'lucide-react';
 import './index.css';
-import ChannelLobby from './components/ChannelLobby';
+import ChannelScreen from './components/ChannelScreen';
+import ConferenceScreen from './components/ConferenceScreen';
+import RadioScreen from './components/RadioScreen';
+import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
@@ -49,7 +52,7 @@ export default function App() {
   const isRecordingRef = useRef(false);
 
   useEffect(() => {
-    if (!username || !channel || (navState !== 'talk' && navState !== 'chat')) return;
+    if (!username || !channel) return;
     if (socket) return; // Prevent double connections if already active
 
     initAudioContext().resume();
@@ -304,14 +307,18 @@ export default function App() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (username.trim()) setNavState('lobby');
+    if (username.trim()) setNavState('channel');
   };
 
   const joinChannel = (ch) => {
     stopRadio(); // PROTECTIVE MUTING: Silence the radio before entering PTT zone!
     setChannel(ch);
     setMessages([]); 
-    setNavState('talk');
+    if (ch.startsWith('MEETING-')) {
+      setNavState('meeting');
+    } else {
+      setNavState('talk');
+    }
   };
 
   const handleSOS = () => {
@@ -322,7 +329,9 @@ export default function App() {
   };
 
   const leaveChannel = () => {
-    setNavState('lobby');
+    if (channel.startsWith('MEETING-')) setNavState('conference');
+    else setNavState('channel');
+    
     setChannel('');
     if (socket) {
       socket.disconnect();
@@ -357,16 +366,23 @@ export default function App() {
         </div>
       )}
 
-      {navState === 'lobby' && (
-        <ChannelLobby 
-          username={username} 
-          onJoinChannel={joinChannel} 
-          activeRadio={activeRadio}
-          onPlayRadio={toggleRadio}
-        />
+      {navState === 'channel' && (
+        <ChannelScreen onJoinChannel={joinChannel} />
       )}
 
-      {navState === 'talk' && channel.startsWith('MEETING-') && (
+      {navState === 'conference' && (
+        <ConferenceScreen username={username} onJoinChannel={joinChannel} />
+      )}
+
+      {navState === 'radio' && (
+        <RadioScreen activeRadio={activeRadio} onPlayRadio={toggleRadio} />
+      )}
+
+      {navState === 'contact' && (
+        <ContactScreen username={username} onJoinChannel={joinChannel} />
+      )}
+
+      {navState === 'meeting' && (
         <MeetingScreen 
           roomCode={channel.split('-')[1]} 
           username={username} 
@@ -375,7 +391,7 @@ export default function App() {
         />
       )}
 
-      {navState === 'talk' && !channel.startsWith('MEETING-') && (
+      {navState === 'talk' && (
         <TalkScreen 
           channel={channel}
           onLeave={leaveChannel}
@@ -399,24 +415,29 @@ export default function App() {
         />
       )}
       
-      {navState !== 'login' && navState !== 'lobby' && (
+      {navState !== 'login' && navState !== 'meeting' && (
         <div className="bottom-nav">
-          <div className={`nav-item ${navState === 'talk' ? 'active' : ''}`} onClick={() => setNavState('talk')}>
-            <Radio size={22} /> Saluran
+          <div className={`nav-item ${(navState === 'channel' || navState === 'talk') ? 'active' : ''}`} onClick={() => setNavState((channel && !channel.startsWith('MEETING-')) ? 'talk' : 'channel')}>
+            <Route size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Saluran</span>
           </div>
-          <div className={`nav-item ${navState === 'chat' ? 'active' : ''}`} onClick={() => setNavState('chat')}>
-            <MessageSquare size={22} /> Pesan
+          <div className={`nav-item ${navState === 'conference' ? 'active' : ''}`} onClick={() => setNavState('conference')}>
+            <Video size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Rapat</span>
           </div>
-          <div className="nav-item" onClick={leaveChannel}>
-            <User size={22} /> Keluar
+          <div className={`nav-item ${navState === 'chat' ? 'active' : ''}`} onClick={() => {
+            if (!channel || channel.startsWith('MEETING-')) {
+               alert("Pilih saluran PTT / Kontak untuk mulai Chatting!");
+            } else {
+               setNavState('chat');
+            }
+          }}>
+            <MessageSquare size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Chat</span>
           </div>
-        </div>
-      )}
-
-      {navState === 'lobby' && (
-        <div className="bottom-nav">
-          <div className="nav-item active"><Radio size={22} /> Saluran</div>
-          <div className="nav-item" onClick={() => setNavState('login')}><User size={22} /> Keluar</div>
+          <div className={`nav-item ${navState === 'radio' ? 'active' : ''}`} onClick={() => setNavState('radio')}>
+            <Radio size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Radio</span>
+          </div>
+          <div className={`nav-item ${navState === 'contact' ? 'active' : ''}`} onClick={() => setNavState('contact')}>
+            <Users size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Kontak</span>
+          </div>
         </div>
       )}
     </div>
