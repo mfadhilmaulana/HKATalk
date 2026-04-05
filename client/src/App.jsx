@@ -175,7 +175,16 @@ export default function App() {
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
         
-        source.connect(receiverChain.input);
+        // Anti-pop Envelope (NetEQ Jitter Concealment)
+        const chunkGain = ctx.createGain();
+        chunkGain.gain.setValueAtTime(0, playTime);
+        chunkGain.gain.linearRampToValueAtTime(1, playTime + 0.005);
+        const duration = audioBuffer.duration;
+        chunkGain.gain.setValueAtTime(1, Math.max(playTime, playTime + duration - 0.005));
+        chunkGain.gain.linearRampToValueAtTime(0, playTime + duration);
+        
+        source.connect(chunkGain);
+        chunkGain.connect(receiverChain.input);
         
         source.start(playTime);
         playTime += audioBuffer.duration;
@@ -234,11 +243,17 @@ export default function App() {
       if (!globalStream || !globalStream.active || globalStream.getAudioTracks().some(t => t.readyState === 'ended')) {
         globalStream = await navigator.mediaDevices.getUserMedia({ 
           audio: { 
-            echoCancellation: true, 
-            noiseSuppression: true,
-            autoGainControl: true,
+            channelCount: 1,
             sampleRate: AUDIO_SAMPLE_RATE,
-            channelCount: 1
+            echoCancellation: { ideal: true }, 
+            noiseSuppression: { ideal: true },
+            autoGainControl: { ideal: true },
+            googEchoCancellation: true,
+            googAutoGainControl: true,
+            googNoiseSuppression: true,
+            googHighpassFilter: true,
+            googTypingNoiseDetection: true,
+            googNoiseReduction: true
           } 
         });
       }

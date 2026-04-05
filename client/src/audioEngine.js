@@ -205,11 +205,12 @@ export function createReceiverChain() {
   highshelf.gain.value = 5; 
 
   const compressor = ctx.createDynamicsCompressor();
-  compressor.threshold.value = -24;
-  compressor.knee.value = 30;
-  compressor.ratio.value = 12;
-  compressor.attack.value = 0.003;
-  compressor.release.value = 0.25;
+  // Enterprise Walkie-Talkie Brickwall Limiter to stop feedback
+  compressor.threshold.value = -12;
+  compressor.knee.value = 0;
+  compressor.ratio.value = 20;
+  compressor.attack.value = 0.001;
+  compressor.release.value = 0.1;
 
   // Audio Visualizer Analyser for incoming audio
   receiverAnalyser = ctx.createAnalyser();
