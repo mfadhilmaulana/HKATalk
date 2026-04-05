@@ -412,7 +412,7 @@ export default function App() {
         <ChatScreen username={username} />
       )}
       
-      {navState !== 'login' && navState !== 'meeting' && (
+      {navState !== 'login' && (
         <div className="bottom-nav">
           <div className={`nav-item ${(navState === 'channel' || navState === 'talk') ? 'active' : ''}`} onClick={() => setNavState((channel && !channel.startsWith('MEETING-')) ? 'talk' : 'channel')}>
             <Route size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Saluran</span>

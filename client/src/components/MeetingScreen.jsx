@@ -206,7 +206,7 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#111', color: 'white', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#111', color: 'white' }}>
       {/* Header */}
       <div style={{ background: '#000', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
