@@ -305,6 +305,32 @@ io.on('connection', (socket) => {
     socket.to(data.target).emit('webrtc-ice-candidate', { ...data, senderId: socket.id });
   });
 
+  socket.on('audio-stream', (data) => {
+    if (socket.data.channel) {
+      socket.to(socket.data.channel).emit('audio-stream', {
+        username: socket.data.username,
+        audioData: data
+      });
+    }
+  });
+
+  socket.on('video-frame', (data) => {
+    if (socket.data.channel) {
+      socket.to(socket.data.channel).emit('video-frame', {
+        username: socket.data.username,
+        frame: data
+      });
+    }
+  });
+
+  socket.on('sos-alert', () => {
+    if (socket.data.channel) {
+      socket.to(socket.data.channel).emit('sos-alert', {
+        username: socket.data.username
+      });
+    }
+  });
+
   socket.on('message-read', (data) => {
     // Notify sender that their messages in the room were read
     const senderSocketId = onlineUsers.get(data.senderPhone);
