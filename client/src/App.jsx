@@ -564,13 +564,9 @@ export default function App() {
             </button>
           </form>
 
-          <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-            <div style={{ fontSize: '0.55rem', color: 'var(--text-tertiary)', lineHeight: 1.6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.02em' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>ENTERPRISE COMMUNICATION PLATFORM v9.0</span>
-            </div>
-            <div className="brand-shimmer" style={{ marginTop: '8px', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.15em', fontFamily: "'JetBrains Mono', monospace", background: 'linear-gradient(90deg, var(--text-tertiary) 0%, var(--accent) 20%, var(--accent-blue) 40%, var(--accent-emerald) 60%, var(--accent-purple) 80%, var(--text-tertiary) 100%)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'shimmer 3s linear infinite' }}>
-              by ITRS HKA
-            </div>
+          <div style={{ marginTop: '1.5rem', fontSize: '0.55rem', color: 'var(--text-tertiary)', textAlign: 'center', lineHeight: 1.6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.02em' }}>
+            by ITRS HKA<br/>
+            <span style={{ color: 'var(--text-secondary)' }}>ENTERPRISE COMMUNICATION PLATFORM v9.0</span>
           </div>
         </div>
       )}
