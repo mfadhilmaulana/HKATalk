@@ -160,13 +160,33 @@ app.get('/api/messages/:room', async (req, res) => {
 app.get('/api/conversations/:phone', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT DISTINCT ON (room) 
-         room, sender_phone, sender_name, msg_type, content, created_at,
-         COALESCE((SELECT COUNT(*) FROM messages m2 WHERE m2.room = messages.room AND m2.sender_phone != $1 AND m2.is_read = false), 0) as unread_count
-       FROM messages 
-       WHERE (room LIKE 'CHAT-%') 
-          OR (room LIKE 'DM-%' AND room LIKE '%' || $1 || '%')
-       ORDER BY room, created_at DESC`,
+      `SELECT DISTINCT ON (m.room) 
+         m.room, m.sender_phone, m.sender_name, m.msg_type, m.content, m.created_at,
+         COALESCE((SELECT COUNT(*) FROM messages m2 WHERE m2.room = m.room AND m2.sender_phone != $1 AND m2.is_read = false), 0) as unread_count,
+         CASE 
+           WHEN m.room LIKE 'DM-%' THEN (
+             SELECT u.display_name 
+             FROM users u 
+             WHERE u.phone = REPLACE(REPLACE(m.room, 'DM-', ''), '-' || $1, '') 
+                OR u.phone = REPLACE(REPLACE(m.room, 'DM-', ''), $1 || '-', '')
+             LIMIT 1
+           )
+           ELSE m.room
+         END as partner_name,
+         CASE 
+           WHEN m.room LIKE 'DM-%' THEN (
+             SELECT TO_CHAR(u.last_seen, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') 
+             FROM users u 
+             WHERE u.phone = REPLACE(REPLACE(m.room, 'DM-', ''), '-' || $1, '') 
+                OR u.phone = REPLACE(REPLACE(m.room, 'DM-', ''), $1 || '-', '')
+             LIMIT 1
+           )
+           ELSE NULL
+         END as partner_last_seen
+       FROM messages m
+       WHERE (m.room LIKE 'CHAT-%') 
+          OR (m.room LIKE 'DM-%' AND m.room LIKE '%' || $1 || '%')
+       ORDER BY m.room, m.created_at DESC`,
       [req.params.phone]
     );
     // Sort by latest message overall

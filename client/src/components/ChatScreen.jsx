@@ -20,6 +20,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   
+  const [chatFilter, setChatFilter] = useState('Semua'); // 'Semua' | 'Personal' | 'Grup'
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const fileInspectionRef = useRef(null);
@@ -190,7 +191,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
 
   const getChatName = (conv) => {
     if (conv.room.startsWith('DM-')) {
-      return conv.sender_phone === userPhone ? 'Anda' : (conv.sender_name || 'Tidak Diketahui');
+      return conv.partner_name || (conv.sender_phone === userPhone ? 'Anda' : (conv.sender_name || 'Tidak Diketahui'));
     }
     return conv.room.replace('CHAT-', '');
   };
@@ -209,6 +210,28 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
           </button>
         </div>
 
+        {/* WhatsApp Style Filters */}
+        <div style={{ display: 'flex', gap: '8px', padding: '0.6rem 1rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', flexShrink: 0, overflowX: 'auto' }}>
+          {['Semua', 'Personal', 'Grup'].map(filter => (
+            <button 
+              key={filter} 
+              onClick={() => setChatFilter(filter)}
+              style={{ 
+                padding: '6px 14px', 
+                borderRadius: 'var(--radius-full)', 
+                border: 'none', 
+                background: chatFilter === filter ? 'rgba(37, 211, 102, 0.15)' : 'var(--bg-tertiary)', 
+                color: chatFilter === filter ? 'var(--accent-emerald)' : 'var(--text-secondary)',
+                fontWeight: chatFilter === filter ? 700 : 500,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                transition: 'all 0.2s var(--ease-out)'
+              }}>
+               {filter}
+            </button>
+          ))}
+        </div>
+
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {conversations.length === 0 && (
             <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
@@ -217,7 +240,12 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
             </div>
           )}
 
-          {conversations.map((conv, idx) => {
+          {conversations.filter(conv => {
+            const isDM = conv.room.startsWith('DM-');
+            if (chatFilter === 'Personal') return isDM;
+            if (chatFilter === 'Grup') return !isDM;
+            return true;
+          }).map((conv, idx) => {
             const name = getChatName(conv);
             const isDM = conv.room.startsWith('DM-');
             const initials = name?.[0]?.toUpperCase() || '?';
@@ -225,20 +253,20 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
 
             return (
               <div key={conv.room} onClick={() => setActiveRoom(conv.room)} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.8rem 1rem', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 0.15s var(--ease-out)' }}>
-                <div style={{ width: 46, height: 46, borderRadius: 'var(--radius-full)', background: isDM ? color : 'var(--bg-tertiary)', color: isDM ? 'white' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: 700, flexShrink: 0, border: isDM ? 'none' : '1px solid var(--border)' }}>
-                  {isDM ? initials : <Users size={20} />}
+                <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)', background: isDM ? color : 'var(--bg-tertiary)', color: isDM ? 'white' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: 700, flexShrink: 0, border: isDM ? 'none' : '1px solid var(--border)' }}>
+                  {isDM ? initials : <Users size={18} />}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>{isDM ? name : `#${name}`}</div>
-                    <div style={{ fontSize: '0.65rem', color: Number(conv.unread_count) > 0 ? 'var(--accent)' : 'var(--text-tertiary)', fontWeight: Number(conv.unread_count) > 0 ? 800 : 500, fontFamily: "'JetBrains Mono', monospace" }}>{new Date(conv.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.88rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>{isDM ? name : `#${name}`}</div>
+                    <div style={{ fontSize: '0.65rem', color: Number(conv.unread_count) > 0 ? 'var(--accent-emerald)' : 'var(--text-tertiary)', fontWeight: Number(conv.unread_count) > 0 ? 800 : 500, fontFamily: "'JetBrains Mono', monospace" }}>{new Date(conv.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, paddingRight: '10px' }}>
                       {conv.sender_phone === userPhone ? 'Anda: ' : `${conv.sender_name}: `}{conv.msg_type === 'sticker' ? '[Balasan Cepat]' : (conv.msg_type === 'image' ? '[Foto]' : (conv.msg_type === 'location' ? '[Lokasi]' : conv.content))}
                     </div>
                     {Number(conv.unread_count) > 0 && (
-                      <div style={{ background: 'var(--accent)', color: 'white', borderRadius: 'var(--radius-full)', padding: '2px 8px', fontSize: '0.65rem', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace" }}>
+                      <div style={{ background: 'var(--accent-emerald)', color: 'white', borderRadius: 'var(--radius-full)', padding: '2px 8px', fontSize: '0.65rem', fontWeight: 800, fontFamily: "'JetBrains Mono', monospace" }}>
                         {conv.unread_count}
                       </div>
                     )}
@@ -283,7 +311,20 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-primary)' }}>{isDM ? roomName : `#${roomName}`}</div>
-          <div style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', marginTop: '2px' }}>{isDM ? 'AKTIF SEKARANG' : 'GRUP TERBUKA'}</div>
+          
+          {/* Last seen / Status logic */}
+          {isDM ? (
+            <div style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', marginTop: '2px' }}>
+              {(() => {
+                 const currentConv = conversations.find(c => c.room === activeRoom);
+                 return currentConv?.partner_last_seen 
+                   ? `Terakhir dilihat ${new Date(currentConv.partner_last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                   : 'Terdaftar di HKA';
+              })()}
+            </div>
+          ) : (
+            <div style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', marginTop: '2px' }}>GRUP TERBUKA</div>
+          )}
         </div>
         {isDM && (
           <div style={{ display: 'flex', gap: '0.5rem', marginRight: '0.8rem', alignItems: 'center' }}>
