@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { Radio, MessageSquare, Users, Video, Route } from 'lucide-react';
+import { Radio, MessageSquare, Users, Video, Route, UserCircle } from 'lucide-react';
 import './index.css';
 import ChannelScreen from './components/ChannelScreen';
 import ConferenceScreen from './components/ConferenceScreen';
@@ -35,7 +35,17 @@ const captureVideoFrame = (videoElement, socket, username, channel) => {
 export default function App() {
   const [navState, setNavState] = useState('login'); 
   const [username, setUsername] = useState('');
+  const [userPhone, setUserPhone] = useState('');
+  const [userProfile, setUserProfile] = useState(null);
   const [channel, setChannel] = useState('');
+  
+  // Auth form states
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+  const [authPhone, setAuthPhone] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authDept, setAuthDept] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
   
   const [socket, setSocket] = useState(null);
   const [participants, setParticipants] = useState([]);
@@ -305,9 +315,59 @@ export default function App() {
     setMessages(prev => [...prev, packet]);
   };
 
-  const handleLogin = (e) => {
+  // Check localStorage session on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('sitalki_session');
+    if (saved) {
+      try {
+        const u = JSON.parse(saved);
+        setUsername(u.display_name);
+        setUserPhone(u.phone);
+        setUserProfile(u);
+        setNavState('channel');
+      } catch (e) {}
+    }
+  }, []);
+
+  const handleAuth = async (e) => {
     e.preventDefault();
-    if (username.trim()) setNavState('channel');
+    setAuthError('');
+    setAuthLoading(true);
+    try {
+      let res;
+      if (authMode === 'register') {
+        res = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: authPhone, display_name: authName, department: authDept })
+        });
+      } else {
+        res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: authPhone })
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) { setAuthError(data.error || 'Gagal'); setAuthLoading(false); return; }
+      setUsername(data.user.display_name);
+      setUserPhone(data.user.phone);
+      setUserProfile(data.user);
+      localStorage.setItem('sitalki_session', JSON.stringify(data.user));
+      setNavState('channel');
+    } catch (err) {
+      setAuthError('Server tidak tersedia. Coba lagi.');
+    }
+    setAuthLoading(false);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('sitalki_session');
+    setUsername('');
+    setUserPhone('');
+    setUserProfile(null);
+    setNavState('login');
+    if (socket) { socket.disconnect(); setSocket(null); }
   };
 
   const joinChannel = (ch) => {
@@ -348,19 +408,27 @@ export default function App() {
     <div className="app-container">
       {navState === 'login' && (
         <div className="auth-container">
-          <h1 style={{color: 'var(--accent)', fontSize: '2.5rem', marginBottom: '4px'}}>Si Talki HKA</h1>
-          <div className="auth-subtitle" style={{fontWeight: 'bold', letterSpacing: '0.5px'}}>Komunikasi Cerdas Dengan Seluruh Insan HKA</div>
+          <h1 style={{color: 'var(--accent)', fontSize: '2.2rem', marginBottom: '4px'}}>Si Talki HKA</h1>
+          <div className="auth-subtitle" style={{fontWeight: 'bold', letterSpacing: '0.5px'}}>Komunikasi Cerdas Seluruh Insan HKA</div>
           <br/>
-          <form style={{ width: '100%' }} onSubmit={handleLogin}>
-            <input 
-              className="form-input"
-              placeholder="Masukkan NIK / Nama Anda" 
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-            />
-            <button type="submit" className="btn-primary" disabled={!username.trim()}>
-              Masuk Sistem
+
+          {/* Tab toggle */}
+          <div style={{ display: 'flex', width: '100%', marginBottom: '1rem', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+            <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); }} style={{ flex: 1, padding: '0.6rem', border: 'none', background: authMode === 'login' ? 'var(--accent)' : 'var(--bg-tertiary)', color: authMode === 'login' ? 'white' : 'var(--text-main)', fontWeight: 600, cursor: 'pointer' }}>Masuk</button>
+            <button type="button" onClick={() => { setAuthMode('register'); setAuthError(''); }} style={{ flex: 1, padding: '0.6rem', border: 'none', background: authMode === 'register' ? 'var(--accent)' : 'var(--bg-tertiary)', color: authMode === 'register' ? 'white' : 'var(--text-main)', fontWeight: 600, cursor: 'pointer' }}>Daftar Baru</button>
+          </div>
+
+          <form style={{ width: '100%' }} onSubmit={handleAuth}>
+            <input className="form-input" placeholder="Nomor HP (08xxx)" value={authPhone} onChange={(e) => setAuthPhone(e.target.value)} autoFocus />
+            {authMode === 'register' && (
+              <>
+                <input className="form-input" placeholder="Nama Lengkap" value={authName} onChange={(e) => setAuthName(e.target.value)} />
+                <input className="form-input" placeholder="Departemen (opsional)" value={authDept} onChange={(e) => setAuthDept(e.target.value)} />
+              </>
+            )}
+            {authError && <div style={{ color: '#c62828', fontSize: '0.85rem', marginBottom: '0.8rem', textAlign: 'center' }}>{authError}</div>}
+            <button type="submit" className="btn-primary" disabled={authLoading || !authPhone.trim() || (authMode === 'register' && !authName.trim())}>
+              {authLoading ? 'Memproses...' : (authMode === 'register' ? 'Daftar & Masuk' : 'Masuk')}
             </button>
           </form>
         </div>
@@ -379,7 +447,7 @@ export default function App() {
       )}
 
       {navState === 'contact' && (
-        <ContactScreen username={username} onJoinChannel={joinChannel} />
+        <ContactScreen username={username} userPhone={userPhone} userProfile={userProfile} onJoinChannel={joinChannel} onLogout={handleLogout} />
       )}
 
       {navState === 'meeting' && (

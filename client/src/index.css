@@ -52,8 +52,22 @@ body {
   box-shadow: 0 0 50px rgba(0,0,0,0.5);
 }
 
-@media (min-width: 481px) {
+@media (min-width: 481px) and (max-width: 1023px) {
+  /* Tablet: fill screen, no phone frame */
   .app-container {
+    max-width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Desktop: phone simulator frame */
+  .app-container {
+    max-width: 420px;
     height: 850px;
     border-radius: 30px;
     border: 8px solid #111;

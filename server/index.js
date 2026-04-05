@@ -3,9 +3,11 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const { pool, initDB } = require('./db');
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 // Serve static files from the React frontend build
 app.use(express.static(path.join(__dirname, '../client/dist')));
@@ -20,8 +22,103 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
+// Initialize DB on startup
+if (process.env.DATABASE_URL) {
+  initDB();
+} else {
+  console.log('⚠️  No DATABASE_URL — running without database');
+}
+
+// ── REST API ──
+
+// Register
+app.post('/api/register', async (req, res) => {
+  const { phone, display_name, department } = req.body;
+  if (!phone || !display_name) return res.status(400).json({ error: 'Phone dan nama wajib diisi' });
+  const colors = ['#e53935','#8e24aa','#3949ab','#00897b','#f4511e','#6d4c41','#d81b60','#1565c0'];
+  const avatar_color = colors[Math.floor(Math.random() * colors.length)];
+  try {
+    const result = await pool.query(
+      'INSERT INTO users (phone, display_name, department, avatar_color) VALUES ($1, $2, $3, $4) ON CONFLICT (phone) DO UPDATE SET display_name=$2, department=$3 RETURNING *',
+      [phone, display_name, department || '', avatar_color]
+    );
+    res.json({ user: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Login
+app.post('/api/login', async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Phone wajib diisi' });
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE phone=$1', [phone]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Nomor tidak terdaftar' });
+    res.json({ user: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update profile
+app.put('/api/profile', async (req, res) => {
+  const { phone, display_name, department } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE users SET display_name=$2, department=$3 WHERE phone=$1 RETURNING *',
+      [phone, display_name, department]
+    );
+    res.json({ user: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Search users
+app.get('/api/users', async (req, res) => {
+  const q = req.query.q || '';
+  try {
+    const result = await pool.query(
+      "SELECT phone, display_name, department, avatar_color FROM users WHERE display_name ILIKE $1 OR phone ILIKE $1 LIMIT 50",
+      [`%${q}%`]
+    );
+    res.json({ users: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save contact
+app.post('/api/contacts', async (req, res) => {
+  const { owner_phone, contact_phone } = req.body;
+  try {
+    await pool.query(
+      'INSERT INTO contacts (owner_phone, contact_phone) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [owner_phone, contact_phone]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get contacts
+app.get('/api/contacts/:phone', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT u.phone, u.display_name, u.department, u.avatar_color 
+       FROM contacts c JOIN users u ON c.contact_phone = u.phone 
+       WHERE c.owner_phone=$1`,
+      [req.params.phone]
+    );
+    res.json({ contacts: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Keep track of users in channels
-// Optional but helps in broadcasting presence
 const channels = {}; 
 
 io.on('connection', (socket) => {
