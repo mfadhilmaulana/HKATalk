@@ -17,6 +17,8 @@ async function initDB() {
   let client;
   try {
     client = await pool.connect();
+    
+    // Users table
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -27,6 +29,8 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+    
+    // Contacts table
     await client.query(`
       CREATE TABLE IF NOT EXISTS contacts (
         id SERIAL PRIMARY KEY,
@@ -35,7 +39,29 @@ async function initDB() {
         UNIQUE(owner_phone, contact_phone)
       );
     `);
-    console.log('✅ PostgreSQL tables ready');
+    
+    // Messages table — stores ALL chat messages (group + DM)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        room VARCHAR(100) NOT NULL,
+        sender_phone VARCHAR(20) NOT NULL,
+        sender_name VARCHAR(100) NOT NULL,
+        msg_type VARCHAR(20) DEFAULT 'text',
+        content TEXT DEFAULT '',
+        image TEXT DEFAULT '',
+        lat DOUBLE PRECISION DEFAULT 0,
+        lng DOUBLE PRECISION DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    
+    // Index on room for fast history lookups
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room, created_at);
+    `);
+    
+    console.log('✅ PostgreSQL tables ready (users, contacts, messages)');
   } catch (err) {
     console.error('❌ DB init error:', err.message);
   } finally {

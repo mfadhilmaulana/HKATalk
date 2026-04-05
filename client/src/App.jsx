@@ -527,7 +527,7 @@ export default function App() {
       )}
 
       {navState === 'chat' && (
-        <ChatScreen username={username} />
+        <ChatScreen username={username} userPhone={userPhone} />
       )}
       
       {navState !== 'login' && (

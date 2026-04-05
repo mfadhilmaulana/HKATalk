@@ -138,8 +138,41 @@ app.get('/api/contacts/:phone', async (req, res) => {
   }
 });
 
+// ── MESSAGES API ──
+
+// Get chat history for a room (last 100 messages)
+app.get('/api/messages/:room', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT sender_phone, sender_name, msg_type, content, image, lat, lng, created_at 
+       FROM messages WHERE room=$1 
+       ORDER BY created_at ASC 
+       LIMIT 100`,
+      [req.params.room]
+    );
+    res.json({ messages: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save a message
+app.post('/api/messages', async (req, res) => {
+  const { room, sender_phone, sender_name, msg_type, content, image, lat, lng } = req.body;
+  try {
+    await pool.query(
+      `INSERT INTO messages (room, sender_phone, sender_name, msg_type, content, image, lat, lng) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [room, sender_phone || '', sender_name || '', msg_type || 'text', content || '', image || '', lat || 0, lng || 0]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Online status tracking
-const onlineUsers = new Map(); // phone -> socketId
+const onlineUsers = new Map();
 
 // Keep track of users in channels
 const channels = {}; 
