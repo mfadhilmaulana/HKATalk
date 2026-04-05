@@ -68,6 +68,12 @@ export default function App() {
   const isRecordingRef = useRef(false);
 
   useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
     if (!username || !userPhone) return;
     if (socket) return; // Prevent double connections
 
@@ -104,7 +110,15 @@ export default function App() {
 
     newSocket.on('incoming-call', (data) => {
       setIncomingCall(data);
-      // Play ringing sound (optional)
+      // Native browser notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const n = new Notification(`Panggilan Masuk dari ${data.callerName}`, {
+          body: `Memanggil (${data.type === 'video' ? 'Video' : 'Suara'})...`,
+          icon: '/favicon.ico'
+        });
+        n.onclick = () => window.focus();
+      }
+      playSiren(); // Temporary usage to ring
     });
 
     newSocket.on('call-accepted', (data) => {
@@ -125,8 +139,12 @@ export default function App() {
     newSocket.on('incoming-message-notif', (data) => {
       // In-app notification for messages
       if (navState !== 'chat') {
-        // Show a small toast or badge (simplified for now)
-        console.log('New message from', data.senderName);
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(`Pesan Baru dari ${data.senderName}`, {
+             body: 'Ketuk untuk membuka aplikasi',
+             icon: '/favicon.ico'
+          });
+        }
       }
     });
 
@@ -453,7 +471,7 @@ export default function App() {
     <div className="app-container">
       {/* Incoming Call Modal */}
       {incomingCall && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
           <div style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '320px', padding: '2rem', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
             <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#128c7e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', fontSize: '2rem', fontWeight: 800 }}>
               {incomingCall.callerName?.[0].toUpperCase()}

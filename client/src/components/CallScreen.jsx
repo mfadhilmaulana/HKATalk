@@ -171,10 +171,10 @@ export default function CallScreen({ activeCall, userPhone, username, socket, on
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#111', zIndex: 10000, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'absolute', inset: 0, background: '#111', zIndex: 10000, display: 'flex', flexDirection: 'column' }}>
       
       {/* Background (If video is off or audio call) */}
-      {!remoteStream && (
+      {(!remoteStream || activeCall.type !== 'video') && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
            <div style={{ width: 120, height: 120, borderRadius: '50%', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '3rem', marginBottom: '2rem' }}>
              {activeCall.callerName?.[0] || <User size={64} />}
@@ -185,16 +185,14 @@ export default function CallScreen({ activeCall, userPhone, username, socket, on
       )}
 
       {/* Remote Video Container */}
-      {activeCall.type === 'video' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 2, background: 'black' }}>
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        </div>
-      )}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 2, background: 'black', display: (activeCall.type === 'video' && remoteStream) ? 'block' : 'none' }}>
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      </div>
 
       {/* Local Video PIP */}
       {activeCall.type === 'video' && localStream && !isVideoOff && (
