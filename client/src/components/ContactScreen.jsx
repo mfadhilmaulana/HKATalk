@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, UserPlus, Phone, Video, QrCode, Shield, LogOut, Check, MessageCircle, Trash2, Mic, Users } from 'lucide-react';
+import { Search, UserPlus, Phone, Video, QrCode, Shield, LogOut, Check, MessageCircle, Trash2, Mic, Users, CheckCircle2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function ContactScreen({ username, userPhone, userProfile, onOpenDM, onPTTContact, onLogout }) {
@@ -54,30 +54,36 @@ export default function ContactScreen({ username, userPhone, userProfile, onOpen
     return `DM-${sorted[0]}-${sorted[1]}`;
   };
 
-  const avatarColor = userProfile?.avatar_color || '#d32f2f';
+  const avatarColor = userProfile?.avatar_color || 'var(--accent-blue)';
   const initials = (username || '?').slice(0, 2).toUpperCase();
   const contactPhones = new Set(contacts.map(c => c.phone));
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #1a237e 0%, #283593 100%)', color: 'white', padding: '0.8rem 1rem 0.6rem', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.6rem' }}>
-          <div style={{ width: 40, height: 40, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 700, flexShrink: 0, border: '2px solid rgba(255,255,255,0.3)' }}>{initials}</div>
+      <div style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', padding: '0.8rem 1rem 0.6rem', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem' }}>
+          <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-full)', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.9rem', fontWeight: 700, flexShrink: 0, border: '1px solid var(--border)' }}>{initials}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: '1rem' }}>{username}</div>
-            <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{userPhone} • {userProfile?.department || 'HKA'}</div>
+            <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{username}</div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.02em', marginTop: '2px' }}>{userPhone} • {userProfile?.department || 'HKA'}</div>
           </div>
-          <button onClick={() => setShowQR(!showQR)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', borderRadius: '6px', padding: '5px 8px', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}><QrCode size={12} /> QR</button>
+          <button onClick={() => setShowQR(!showQR)} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s' }}><QrCode size={14} /> BARCODE</button>
         </div>
-        {showQR && <div style={{ display: 'flex', justifyContent: 'center', padding: '0.8rem', background: 'white', borderRadius: '10px', marginBottom: '0.5rem' }}><QRCodeSVG value={userPhone || username} size={100} /></div>}
-        <div style={{ display: 'flex', gap: '2px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '2px' }}>
+        
+        {showQR && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem', background: 'var(--bg-card)', borderRadius: 'var(--radius-md)', marginBottom: '0.8rem', border: '1px solid var(--border)', boxShadow: 'var(--shadow-xs)', animation: 'slideIn 0.2s var(--ease-out)' }}>
+            <QRCodeSVG value={userPhone || username} size={120} />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '3px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', padding: '3px', border: '1px solid var(--border)' }}>
           {[
             { key: 'contacts', label: `Kontak (${contacts.length})` },
             { key: 'directory', label: 'Direktori' },
             { key: 'profile', label: 'Profil' },
           ].map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{ flex: 1, padding: '5px', borderRadius: '6px', border: 'none', background: tab === t.key ? 'white' : 'transparent', color: tab === t.key ? '#1a237e' : 'rgba(255,255,255,0.7)', fontWeight: 600, fontSize: '0.7rem', cursor: 'pointer' }}>{t.label}</button>
+            <button key={t.key} onClick={() => setTab(t.key)} style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-sm)', border: 'none', background: tab === t.key ? 'var(--bg-secondary)' : 'transparent', color: tab === t.key ? 'var(--text-primary)' : 'var(--text-tertiary)', fontWeight: 600, fontSize: '0.7rem', cursor: 'pointer', transition: 'all 0.2s var(--ease-out)', boxShadow: tab === t.key ? 'var(--shadow-xs)' : 'none', fontFamily: 'inherit' }}>{t.label}</button>
           ))}
         </div>
       </div>
@@ -85,79 +91,102 @@ export default function ContactScreen({ username, userPhone, userProfile, onOpen
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {/* CONTACTS TAB */}
         {tab === 'contacts' && (
-          <>
+          <div style={{ padding: '0.6rem' }}>
             {contacts.length === 0 ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Belum ada kontak. <span style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }} onClick={() => setTab('directory')}>Cari di Direktori →</span></div>
+              <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                <Users size={42} style={{ opacity: 0.3, marginBottom: '1rem' }} />
+                <p style={{ fontSize: '0.85rem' }}>Belum ada kontak terdaftar.</p>
+                <div style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 600, marginTop: '0.5rem', fontSize: '0.85rem' }} onClick={() => setTab('directory')}>Cari di Direktori &rarr;</div>
+              </div>
             ) : (
-              contacts.map((c, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 0.8rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ width: 42, height: 42, borderRadius: '50%', background: c.avatar_color || '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.9rem', flexShrink: 0 }}>{(c.display_name||'?')[0].toUpperCase()}</div>
-                  <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={() => onOpenDM && onOpenDM(getDMRoom(c.phone), c.display_name)}>
-                    <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.display_name}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{c.department || c.phone}</div>
+              <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+                {contacts.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.7rem 0.8rem', borderBottom: i < contacts.length - 1 ? '1px solid var(--border)' : 'none', background: 'transparent' }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-full)', background: c.avatar_color || 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '1rem', flexShrink: 0 }}>{(c.display_name||'?')[0].toUpperCase()}</div>
+                    <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={() => onOpenDM && onOpenDM(getDMRoom(c.phone), c.display_name)}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{c.display_name}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: '2px', fontFamily: "'JetBrains Mono', monospace" }}>{c.department || c.phone}</div>
+                    </div>
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button onClick={() => onOpenDM && onOpenDM(getDMRoom(c.phone), c.display_name)} title="Chat" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><MessageCircle size={15} color="var(--accent-blue)" /></button>
+                      <button onClick={() => onPTTContact && onPTTContact(c)} title="Push to Talk" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><Mic size={15} color="var(--accent-emerald)" /></button>
+                      <button onClick={() => removeContact(c.phone)} title="Hapus" style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '6px' }}><Trash2 size={16} /></button>
+                    </div>
                   </div>
-                  {/* Action buttons */}
-                  <button onClick={() => onOpenDM && onOpenDM(getDMRoom(c.phone), c.display_name)} title="Chat" style={{ background: '#25d366', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><MessageCircle size={13} color="white" /></button>
-                  <button onClick={() => onPTTContact && onPTTContact(c)} title="Push to Talk" style={{ background: '#00a884', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><Mic size={13} color="white" /></button>
-                  <button onClick={() => removeContact(c.phone)} title="Hapus" style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', padding: '3px' }}><Trash2 size={14} /></button>
-                </div>
-              ))
+                ))}
+              </div>
             )}
-          </>
+          </div>
         )}
 
         {/* DIRECTORY TAB */}
         {tab === 'directory' && (
-          <>
-            <div style={{ padding: '0.5rem 0.8rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', display: 'flex', gap: '0.3rem', position: 'sticky', top: 0, zIndex: 5 }}>
-              <input placeholder="Cari nama / nomor HP..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()} style={{ flex: 1, padding: '7px 10px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.8rem', background: 'var(--bg-tertiary)', color: '#111', outline: 'none' }} />
-              <button onClick={handleSearch} style={{ background: '#1a237e', color: 'white', border: 'none', borderRadius: '8px', padding: '0 10px', cursor: 'pointer' }}><Search size={14} /></button>
+          <div style={{ padding: '0.6rem' }}>
+            <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--bg-primary)', paddingBottom: '0.6rem' }}>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <input placeholder="Ketik nama atau nomor HP..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()} style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', background: 'var(--bg-card)', color: 'var(--text-primary)', outline: 'none' }} />
+                <button onClick={handleSearch} style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', padding: '0 16px', cursor: 'pointer', transition: 'all 0.15s var(--ease-spring)' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.94)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><Search size={16} /></button>
+              </div>
+              <div style={{ padding: '0.6rem 0.2rem 0', fontSize: '0.6rem', color: 'var(--text-tertiary)', fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.05em' }}>{allUsers.length} PENGGUNA GLOBAL</div>
             </div>
-            <div style={{ padding: '0.4rem 1rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}><Users size={11} style={{ verticalAlign: 'middle' }} /> {allUsers.length} pengguna terdaftar</div>
-            {(searchQuery ? searchResults : allUsers).map((u, i) => {
-              const isContact = contactPhones.has(u.phone);
-              return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.6rem 1rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: u.avatar_color || '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>{(u.display_name||'?')[0].toUpperCase()}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.85rem' }}>{u.display_name}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{u.department || u.phone}</div>
+            
+            <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+              {(searchQuery ? searchResults : allUsers).map((u, i) => {
+                const isContact = contactPhones.has(u.phone);
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.7rem 0.8rem', borderBottom: i < (searchQuery ? searchResults : allUsers).length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)', background: u.avatar_color || 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.9rem', flexShrink: 0 }}>{(u.display_name||'?')[0].toUpperCase()}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{u.display_name}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: '2px', fontFamily: "'JetBrains Mono', monospace" }}>{u.department || u.phone}</div>
+                    </div>
+                    {isContact ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', color: 'var(--accent-emerald)', fontWeight: 700, background: 'rgba(5,150,105,0.1)', padding: '4px 8px', borderRadius: 'var(--radius-full)' }}><CheckCircle2 size={12} /> TERSIMPAN</div>
+                    ) : (
+                      <button onClick={() => addContact(u.phone)} style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius-full)', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', transition: 'transform 0.15s' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><UserPlus size={14} /> TAMBAH</button>
+                    )}
                   </div>
-                  {isContact ? (
-                    <span style={{ fontSize: '0.7rem', color: '#25d366', fontWeight: 600 }}>✓ Kontak</span>
-                  ) : (
-                    <button onClick={() => addContact(u.phone)} style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '6px', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: '2px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}><UserPlus size={12} /> Tambah</button>
-                  )}
-                </div>
-              );
-            })}
-          </>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {/* PROFILE TAB */}
         {tab === 'profile' && (
-          <div style={{ padding: '1.2rem 1rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '1.2rem' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '1.4rem', marginBottom: '0.4rem', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>{initials}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{userPhone}</div>
+          <div style={{ padding: '1rem' }}>
+            <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: '1.5rem 1.2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '1.2rem', boxShadow: 'var(--shadow-xs)' }}>
+              <div style={{ width: 72, height: 72, borderRadius: 'var(--radius-full)', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '1.6rem', marginBottom: '0.8rem', border: '2px solid var(--border)' }}>{initials}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.05em' }}>{userPhone}</div>
             </div>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '3px' }}>Nama Tampilan</label>
-            <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '100%', padding: '9px 10px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.9rem', background: 'var(--bg-secondary)', color: '#111', outline: 'none', marginBottom: '0.8rem' }} />
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '3px' }}>Departemen / Unit</label>
-            <select value={editDept} onChange={(e) => setEditDept(e.target.value)} style={{ width: '100%', padding: '9px 10px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.85rem', background: 'var(--bg-secondary)', color: '#111', outline: 'none', marginBottom: '1.2rem' }}>
-              <option value="">Pilih Departemen...</option>
-              <optgroup label="Kantor Pusat">
-                {['Departemen HC, Pengembangan dan IT','Departemen Keuangan, Akuntansi, dan Risiko','Departemen Operasi I','Departemen Operasi II','Departemen QHSSE','Departemen Satuan Pengawas Intern','Departemen Sekretaris Perusahaan','Unit ITRS','Unit OCSC','Unit SMRK','Unit Bisnis Turunan OM'].map(d => <option key={d} value={d}>{d}</option>)}
-              </optgroup>
-              <optgroup label="Ruas">
-                {['Ruas BTB','Ruas Akses Tanjung Priok','Ruas Bakauheni–Terbanggi Besar','Ruas Bengkulu–Taba Penanjung','Ruas Betung–Jambi','Ruas Binjai–Stabat','Ruas Indralaya–Prabumulih','Ruas Indrapura–Kisaran','Ruas JORRS','Ruas Kuala Tanjung–Parapat','Ruas Medan–Binjai','Ruas Padang–Sicincin','Ruas Palembang–Indralaya','Ruas Pekanbaru–Bangkinang','Ruas Pekanbaru–Dumai','Ruas Sigli–Banda Aceh','Ruas Terbanggi Besar–Kayu Agung'].map(d => <option key={d} value={d}>{d}</option>)}
-              </optgroup>
-              <optgroup label="Unit Produksi">
-                {['UP Bojonegara','UP Indralaya','UP Jabodetabek','UP Muara Fajar','UP Patimban','UP Sei Langsat','UP Stone Crusher Sumatera'].map(d => <option key={d} value={d}>{d}</option>)}
-              </optgroup>
-            </select>
-            <button onClick={saveProfile} disabled={saving} style={{ width: '100%', padding: '0.7rem', background: '#1a237e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginBottom: '0.6rem' }}><Check size={14} /> {saving ? 'Menyimpan...' : 'Simpan Profil'}</button>
-            <button onClick={onLogout} style={{ width: '100%', padding: '0.7rem', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}><LogOut size={14} /> Keluar Akun</button>
+
+            <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: '1.2rem', marginBottom: '1.2rem', boxShadow: 'var(--shadow-xs)' }}>
+              <label style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 700, display: 'block', marginBottom: '6px', letterSpacing: '0.05em', fontFamily: "'JetBrains Mono', monospace" }}>NAMA TAMPILAN</label>
+              <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', outline: 'none', marginBottom: '1.2rem', transition: 'border-color 0.2s' }} onFocus={e => e.currentTarget.style.borderColor='var(--accent)'} onBlur={e => e.currentTarget.style.borderColor='var(--border)'} />
+              
+              <label style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 700, display: 'block', marginBottom: '6px', letterSpacing: '0.05em', fontFamily: "'JetBrains Mono', monospace" }}>DEPARTEMEN / UNIT</label>
+              <select value={editDept} onChange={(e) => setEditDept(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', outline: 'none', marginBottom: '1.5rem' }}>
+                <option value="">Pilih Departemen...</option>
+                <optgroup label="Kantor Pusat">
+                  {['Departemen HC, Pengembangan dan IT','Departemen Keuangan, Akuntansi, dan Risiko','Departemen Operasi I','Departemen Operasi II','Departemen QHSSE','Departemen Satuan Pengawas Intern','Departemen Sekretaris Perusahaan','Unit ITRS','Unit OCSC','Unit SMRK','Unit Bisnis Turunan OM'].map(d => <option key={d} value={d}>{d}</option>)}
+                </optgroup>
+                <optgroup label="Ruas">
+                  {['Ruas BTB','Ruas Akses Tanjung Priok','Ruas Bakauheni–Terbanggi Besar','Ruas Bengkulu–Taba Penanjung','Ruas Betung–Jambi','Ruas Binjai–Stabat','Ruas Indralaya–Prabumulih','Ruas Indrapura–Kisaran','Ruas JORRS','Ruas Kuala Tanjung–Parapat','Ruas Medan–Binjai','Ruas Padang–Sicincin','Ruas Palembang–Indralaya','Ruas Pekanbaru–Bangkinang','Ruas Pekanbaru–Dumai','Ruas Sigli–Banda Aceh','Ruas Terbanggi Besar–Kayu Agung'].map(d => <option key={d} value={d}>{d}</option>)}
+                </optgroup>
+                <optgroup label="Unit Produksi">
+                  {['UP Bojonegara','UP Indralaya','UP Jabodetabek','UP Muara Fajar','UP Patimban','UP Sei Langsat','UP Stone Crusher Sumatera'].map(d => <option key={d} value={d}>{d}</option>)}
+                </optgroup>
+              </select>
+
+              <button onClick={saveProfile} disabled={saving} style={{ width: '100%', padding: '0.85rem', background: 'var(--accent-blue)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'transform 0.15s var(--ease-spring)', fontFamily: 'inherit' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.97)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}>
+                <Check size={16} /> {saving ? 'Menyimpan...' : 'Simpan Profil'}
+              </button>
+            </div>
+
+            <button onClick={onLogout} style={{ width: '100%', padding: '0.85rem', background: 'var(--bg-secondary)', color: 'var(--accent)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'transform 0.15s', fontFamily: 'inherit' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.97)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}>
+              <LogOut size={16} /> Keluar Akun
+            </button>
           </div>
         )}
       </div>
