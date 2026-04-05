@@ -22,6 +22,58 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
   
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const fileInspectionRef = useRef(null);
+
+  const handleInspectionPhoto = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const r = new FileReader(); 
+    r.onload = (ev) => {
+        const img = new Image(); 
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_W = 800, scale = Math.min(MAX_W / img.width, 1);
+            canvas.width = img.width * scale; canvas.height = img.height * scale;
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            const base64 = canvas.toDataURL('image/jpeg', 0.6);
+            
+            if (!navigator.geolocation) {
+                alert('GPS tidak didukung di browser ini.'); return;
+            }
+            
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                let locationName = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+                
+                setLoading(true);
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                    const data = await res.json();
+                    if (data.display_name) {
+                       // Ambil ringkasan alamat (hilangkan detail kelurahan jika terlalu panjang, atau ambil semua)
+                       const parts = data.display_name.split(',');
+                       locationName = parts.slice(0, 3).join(',').trim(); 
+                    }
+                } catch(error) {
+                    console.log('Geocoding failed');
+                }
+                setLoading(false);
+                
+                const summary = `📍 Inspeksi Lapangan\nLokasi: ${locationName}`;
+                
+                const p = { type: 'inspection', text: summary, image: base64, lat: lat, lng: lng, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
+                if (socket) socket.emit('chat-message', p); 
+                setMessages(prev => [...prev, p]); 
+                saveMessage(p);
+            }, () => {
+                alert('Gagal mendapatkan GPS. Pastikan Izin Lokasi diaktifkan.');
+            });
+        }; 
+        img.src = ev.target.result;
+    }; 
+    r.readAsDataURL(file);
+    e.target.value = null; // reset
+  };
 
   const loadConversations = () => {
     if (!userPhone) return;
@@ -272,7 +324,20 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
                      </a>
                   )}
 
-                  {msg.type !== 'sticker' && <div style={{ fontSize: '0.85rem', color: isSelf ? 'white' : 'var(--text-primary)', lineHeight: 1.5, wordBreak: 'break-word', paddingBottom: '12px' }}>{msg.text}</div>}
+                  {msg.type === 'inspection' && (
+                     <div style={{ background: isSelf ? 'rgba(0,0,0,0.15)' : 'var(--bg-tertiary)', padding: '0.5rem', borderRadius: '8px', marginBottom: '8px', border: isSelf ? '1px solid rgba(255,255,255,0.2)' : '1px solid var(--border)' }}>
+                        <img src={msg.image} alt="Inspeksi" style={{ width: '100%', borderRadius: '4px', marginBottom: '6px' }} />
+                        <a href={`https://www.google.com/maps?q=${msg.lat},${msg.lng}`} target="_blank" rel="noreferrer" style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', fontSize: '0.75rem', color: isSelf ? 'white' : 'var(--text-primary)', textDecoration: 'none', fontWeight: 600 }}>
+                           <Shield size={16} color={isSelf ? 'white' : 'var(--accent-emerald)'} style={{ flexShrink: 0, marginTop: '2px' }} />
+                           <div>
+                             <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.4, wordBreak: 'break-word' }}>{msg.text}</div>
+                             <div style={{ fontSize: '0.6rem', opacity: 0.8, fontFamily: "'JetBrains Mono', monospace", marginTop: '4px' }}>LAT: {msg.lat?.toFixed(6)} | LNG: {msg.lng?.toFixed(6)}</div>
+                           </div>
+                        </a>
+                     </div>
+                  )}
+
+                  {(msg.type !== 'sticker' && msg.type !== 'inspection') && <div style={{ fontSize: '0.85rem', color: isSelf ? 'white' : 'var(--text-primary)', lineHeight: 1.5, wordBreak: 'break-word', paddingBottom: '12px' }}>{msg.text}</div>}
                   
                   <div style={{ position: 'absolute', bottom: '6px', right: '8px', fontSize: '0.55rem', color: isSelf ? 'rgba(255,255,255,0.7)' : 'var(--text-tertiary)', display: 'flex', gap: '2px', alignItems: 'center', fontFamily: "'JetBrains Mono', monospace" }}>
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -323,7 +388,12 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
                     if (socket) socket.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
                 }; img.src = ev.target.result;
             }; r.readAsDataURL(file);
+            e.target.value = null;
           }} />
+        </button>
+        <button type="button" onClick={() => fileInspectionRef.current?.click()} style={{ background: 'rgba(5, 150, 105, 0.1)', border: '1px solid rgba(5, 150, 105, 0.4)', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', width: 36, height: 36, borderRadius: 'var(--radius-full)', transition: 'all 0.2s', padding: 0 }} title="Inspeksi Lapangan (Foto + GPS Otomatis)">
+          <Shield size={18} />
+          <input type="file" accept="image/*" capture="environment" ref={fileInspectionRef} style={{ display: 'none' }} onChange={handleInspectionPhoto} />
         </button>
         <button type="button" onClick={() => {
             if (!navigator.geolocation) return;
