@@ -21,20 +21,7 @@ const PORT = process.env.PORT || 3001;
 
 // Initialize DB on startup
 if (process.env.DATABASE_URL) {
-  initDB().then(() => {
-    // Seed pre-defined rooms (optional but helpful)
-    const seedRooms = [
-      { room: 'CHAT-GENERAL', name: 'O&M General', sender: 'System', content: 'Selamat datang di Ruang Koordinasi General O&M' },
-      { room: 'CHAT-PPKA', name: 'Ruas Pematang Panggang - Kayu Agung', sender: 'System', content: 'Grup khusus Ruas PPKA' },
-      { room: 'CHAT-PIKET', name: 'Piket Layanan Jalan Tol', sender: 'System', content: 'Koordinasi serah terima piket' },
-      { room: 'CHAT-RESCUE', name: 'Layanan Rescue & Medis', sender: 'System', content: 'Tanggap darurat & Medis' },
-      { room: 'CHAT-PATROLI', name: 'Tim Patroli Keamanan', sender: 'System', content: 'Monitoring keamanan & lalu lintas' },
-      { room: 'CHAT-SENKOM', name: 'Sentral Komunikasi (Senkom)', sender: 'System', content: 'Pusat kendali informasi & laporan' }
-    ];
-    seedRooms.forEach(r => {
-      pool.query('INSERT INTO messages (room, sender_phone, sender_name, content) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING', [r.room, '000', r.sender, r.content]).catch(() => {});
-    });
-  });
+  initDB();
 } else {
   console.log('⚠️  No DATABASE_URL — running without database');
 }
@@ -151,11 +138,13 @@ app.get('/api/contacts/:phone', async (req, res) => {
   }
 });
 
+// ── MESSAGES API ──
+
 // Get chat history for a room (last 100 messages)
 app.get('/api/messages/:room', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, sender_phone, sender_name, msg_type, content, image, lat, lng, is_edited, is_deleted, created_at 
+      `SELECT sender_phone, sender_name, msg_type, content, image, lat, lng, created_at 
        FROM messages WHERE room=$1 
        ORDER BY created_at ASC 
        LIMIT 100`,
@@ -167,36 +156,17 @@ app.get('/api/messages/:room', async (req, res) => {
   }
 });
 
-// Update read status
-app.post('/api/read-status', async (req, res) => {
-  const { phone, room } = req.body;
-  if (!phone || !room) return res.status(400).json({ error: 'Data tidak lengkap' });
-  try {
-    await pool.query(
-      'INSERT INTO room_members (room, user_phone, last_read_at) VALUES ($1, $2, NOW()) ON CONFLICT (room, user_phone) DO UPDATE SET last_read_at = NOW()',
-      [room, phone]
-    );
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get all recent conversations for a user with unread counts
+// Get all recent conversations for a user
 app.get('/api/conversations/:phone', async (req, res) => {
-  const { phone } = req.params;
   try {
     const result = await pool.query(
-      `SELECT DISTINCT ON (m.room) 
-         m.room, m.sender_phone, m.sender_name, m.msg_type, m.content, m.created_at,
-         (SELECT COUNT(*) FROM messages m2 
-          WHERE m2.room = m.room 
-          AND m2.created_at > (SELECT COALESCE(last_read_at, '1970-01-01') FROM room_members WHERE room = m.room AND user_phone = $1 LIMIT 1)) as unread_count
-       FROM messages m
-       WHERE (m.room LIKE 'CHAT-%') 
-          OR (m.room LIKE 'DM-%' AND m.room LIKE '%' || $1 || '%')
-       ORDER BY m.room, m.created_at DESC`,
-      [phone]
+      `SELECT DISTINCT ON (room) 
+         room, sender_phone, sender_name, msg_type, content, created_at
+       FROM messages 
+       WHERE (room LIKE 'CHAT-%') 
+          OR (room LIKE 'DM-%' AND room LIKE '%' || $1 || '%')
+       ORDER BY room, created_at DESC`,
+      [req.params.phone]
     );
     // Sort by latest message overall
     const conversations = result.rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -210,44 +180,12 @@ app.get('/api/conversations/:phone', async (req, res) => {
 app.post('/api/messages', async (req, res) => {
   const { room, sender_phone, sender_name, msg_type, content, image, lat, lng } = req.body;
   try {
-    const result = await pool.query(
+    await pool.query(
       `INSERT INTO messages (room, sender_phone, sender_name, msg_type, content, image, lat, lng) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [room, sender_phone || '', sender_name || '', msg_type || 'text', content || '', image || '', lat || 0, lng || 0]
     );
-    res.json({ ok: true, message: result.rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Edit a message
-app.put('/api/messages/:id', async (req, res) => {
-  const { id } = req.params;
-  const { content, sender_phone } = req.body;
-  try {
-    const result = await pool.query(
-      'UPDATE messages SET content=$1, is_edited=TRUE WHERE id=$2 AND sender_phone=$3 RETURNING *',
-      [content, id, sender_phone]
-    );
-    if (result.rows.length === 0) return res.status(403).json({ error: 'Tidak diizinkan' });
-    res.json({ message: result.rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Delete a message (soft delete)
-app.delete('/api/messages/:id', async (req, res) => {
-  const { id } = req.params;
-  const { sender_phone } = req.body;
-  try {
-    const result = await pool.query(
-      'UPDATE messages SET is_deleted=TRUE, content=\'Pesan ini telah dihapus\' WHERE id=$1 AND sender_phone=$2 RETURNING *',
-      [id, sender_phone]
-    );
-    if (result.rows.length === 0) return res.status(403).json({ error: 'Tidak diizinkan' });
-    res.json({ message: result.rows[0] });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -353,14 +291,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('chat-message', (data) => {
-    // data should ideally come with the ID if saved via REST first, 
-    // but here we broadcast and clients might save to DB themselves or we do it here.
-    // In current architecture, Client calls POST /api/messages THEN emits socket.
-    // So 'data' should already have the 'id' from the REST response.
     if (socket.data.channel) {
       socket.to(socket.data.channel).emit('chat-message', {
         ...data,
         username: socket.data.username,
+        id: socket.id,
         timestamp: new Date().toISOString()
       });
     }
@@ -371,21 +306,12 @@ io.on('connection', (socket) => {
        const targetSocketId = onlineUsers.get(targetPhone);
        if (targetSocketId) {
          io.to(targetSocketId).emit('incoming-message-notif', {
-           ...data,
-           senderName: socket.data.username
+           room: data.room,
+           senderName: socket.data.username,
+           text: data.text
          });
        }
     }
-  });
-
-  socket.on('edit-message', (data) => {
-    // Broadcast edit to everyone in the room
-    if (data.room) socket.to(data.room).emit('message-edited', data);
-  });
-
-  socket.on('delete-message', (data) => {
-    // Broadcast deletion to everyone in the room
-    if (data.room) socket.to(data.room).emit('message-deleted', data);
   });
 
   socket.on('disconnecting', () => {

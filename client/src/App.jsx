@@ -612,31 +612,7 @@ export default function App() {
       )}
 
       {navState === 'chat' && (
-        <ChatScreen 
-          username={username} 
-          userPhone={userPhone} 
-          initialRoom={dmRoom} 
-          initialRoomName={dmName} 
-          onClearDM={() => { setDmRoom(null); setDmName(''); }}
-          onCall={(targetRoom) => {
-            if (!targetRoom.startsWith('DM-')) return;
-            const parts = targetRoom.split('-');
-            const targetPhone = parts.find(p => p !== userPhone && p !== 'DM');
-            if (!targetPhone) return;
-            const code = `CALL-${[userPhone, targetPhone].sort().join('-')}`;
-            socket?.emit('call-user', { targetPhone, type: 'voice', callerName: username });
-            joinChannel(`MEETING-${code}`);
-          }}
-          onVideoCall={(targetRoom) => {
-            if (!targetRoom.startsWith('DM-')) return;
-            const parts = targetRoom.split('-');
-            const targetPhone = parts.find(p => p !== userPhone && p !== 'DM');
-            if (!targetPhone) return;
-            const code = `VC-${[userPhone, targetPhone].sort().join('-')}`;
-            socket?.emit('call-user', { targetPhone, type: 'video', callerName: username });
-            joinChannel(`MEETING-${code}`);
-          }}
-        />
+        <ChatScreen username={username} userPhone={userPhone} initialRoom={dmRoom} initialRoomName={dmName} onClearDM={() => { setDmRoom(null); setDmName(''); }} />
       )}
       
       {navState !== 'login' && (
