@@ -9,7 +9,6 @@ import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
-import CallScreen from './components/CallScreen';
 import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, playRingtone, stopRingtone, AUDIO_SAMPLE_RATE } from './audioEngine';
 
 let mediaStreamSource = null;
@@ -57,8 +56,7 @@ export default function App() {
   const [activeFrame, setActiveFrame] = useState(null);
   const localVideoRef = useRef(null);
 
-  const [activeRadio, setActiveRadio] = useState(null);
-  const [radioError, setRadioError] = useState(null);
+  const [tab, setTab] = useState('summary');
   const [dmRoom, setDmRoom] = useState(null);
   const [dmName, setDmName] = useState('');
   const [incomingCall, setIncomingCall] = useState(null); // { from, callerName, type, signalData }
@@ -106,34 +104,6 @@ export default function App() {
     newSocket.on('sos-alert', (data) => {
       setMessages(prev => [...prev, { text: `🚨 DARURAT: ${data.username} MENEKAN TOMBOL SOS!`, type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
       playSiren();
-    });
-
-    newSocket.on('incoming-call', (data) => {
-      setIncomingCall(data);
-      // Native browser notification
-      if ('Notification' in window && Notification.permission === 'granted') {
-        const n = new Notification(`Panggilan Masuk dari ${data.callerName}`, {
-          body: `Memanggil (${data.type === 'video' ? 'Video' : 'Suara'})...`,
-          icon: '/favicon.ico'
-        });
-        n.onclick = () => window.focus();
-      }
-      playRingtone();
-    });
-
-    newSocket.on('call-accepted', (data) => {
-      setActiveCall(prev => ({ ...prev, accepted: true }));
-    });
-
-    newSocket.on('call-rejected', () => {
-      alert('Panggilan ditolak');
-      setActiveCall(null);
-    });
-
-    newSocket.on('call-hungup', () => {
-      setActiveCall(null);
-      setIncomingCall(null);
-      stopRingtone();
     });
 
     newSocket.on('incoming-message-notif', (data) => {
@@ -453,7 +423,7 @@ export default function App() {
 
   const leaveChannel = () => {
     if (channel.startsWith('MEETING-')) setNavState('conference');
-    else if (channel.startsWith('CALL-') || channel.startsWith('VC-')) setNavState('chat');
+    else if (channel.startsWith('DM-')) setNavState('chat'); // Go back to chat from PTT
     else setNavState('channel');
     
     setChannel('');
@@ -469,57 +439,6 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Incoming Call Modal */}
-      {incomingCall && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-          <div style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '320px', padding: '2rem', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
-            <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#128c7e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', fontSize: '2rem', fontWeight: 800 }}>
-              {incomingCall.callerName?.[0].toUpperCase()}
-            </div>
-            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginBottom: '0.5rem' }}>{incomingCall.callerName}</h2>
-            <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '2rem' }}>Memanggil ({incomingCall.type === 'video' ? 'Video' : 'Suara'})...</p>
-            
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem' }}>
-              <button 
-                onClick={() => {
-                  socket?.emit('reject-call', { targetPhone: incomingCall.from });
-                  setIncomingCall(null);
-                  stopRingtone();
-                }}
-                style={{ width: 64, height: 64, borderRadius: '50%', background: '#ff3b30', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-              >
-                <X size={32} />
-              </button>
-              <button 
-                onClick={() => {
-                  socket?.emit('accept-call', { targetPhone: incomingCall.from });
-                  const roomCode = `CALL-${[userPhone, incomingCall.from].sort().join('-')}`;
-                  setActiveCall({ targetPhone: incomingCall.from, type: incomingCall.type, isCaller: false, accepted: true, callerName: incomingCall.callerName, roomCode });
-                  setIncomingCall(null);
-                  stopRingtone();
-                  joinChannel(roomCode); // Join the socket room for signaling, but don't redirect navState if we handle it cleanly
-                }}
-                style={{ width: 64, height: 64, borderRadius: '50%', background: '#25d366', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-              >
-                {incomingCall.type === 'video' ? <Video size={32} /> : <Phone size={32} />}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeCall && (
-         <CallScreen
-           activeCall={activeCall}
-           userPhone={userPhone}
-           username={username}
-           socket={socket}
-           onEndCall={() => {
-             setActiveCall(null);
-             leaveChannel();
-           }}
-         />
-      )}
 
       {navState === 'login' && (
         <div className="auth-container">
@@ -610,16 +529,10 @@ export default function App() {
           userPhone={userPhone} 
           userProfile={userProfile} 
           onOpenDM={(room, name) => { setDmRoom(room); setDmName(name); setNavState('chat'); }}
-          onCallContact={(c) => { 
-            const roomCode = `CALL-${[userPhone,c.phone].sort().join('-')}`; 
-            socket?.emit('call-user', { targetPhone: c.phone, type: 'voice', callerName: username });
-            setActiveCall({ targetPhone: c.phone, type: 'voice', isCaller: true, accepted: false, callerName: c.display_name, roomCode });
-            joinChannel(roomCode); 
-          }}
-          onVideoCallContact={(c) => { 
-            const roomCode = `VC-${[userPhone,c.phone].sort().join('-')}`; 
-            socket?.emit('call-user', { targetPhone: c.phone, type: 'video', callerName: username });
-            setActiveCall({ targetPhone: c.phone, type: 'video', isCaller: true, accepted: false, callerName: c.display_name, roomCode });
+          onPTTContact={(c) => { 
+            const roomCode = `DM-${[userPhone,c.phone].sort().join('-')}`; 
+            setDmRoom(roomCode); 
+            setDmName(c.display_name);
             joinChannel(roomCode); 
           }}
           onLogout={handleLogout} 
@@ -660,17 +573,8 @@ export default function App() {
           initialRoomName={dmName} 
           socket={socket}
           onClearDM={() => { setDmRoom(null); setDmName(''); }} 
-          onCall={(targetPhone, name) => {
-            const roomCode = `CALL-${[userPhone, targetPhone].sort().join('-')}`; 
-            socket?.emit('call-user', { targetPhone, type: 'voice', callerName: username });
-            setActiveCall({ targetPhone, type: 'voice', isCaller: true, accepted: false, callerName: name || 'Panggilan', roomCode });
-            joinChannel(roomCode); 
-          }}
-          onVideoCall={(targetPhone, name) => {
-            const roomCode = `VC-${[userPhone, targetPhone].sort().join('-')}`; 
-            socket?.emit('call-user', { targetPhone, type: 'video', callerName: username });
-            setActiveCall({ targetPhone, type: 'video', isCaller: true, accepted: false, callerName: name || 'Panggilan', roomCode });
-            joinChannel(roomCode); 
+          onPTT={(activeRoom) => {
+             joinChannel(activeRoom); 
           }}
         />
       )}

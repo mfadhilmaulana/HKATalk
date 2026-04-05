@@ -11,7 +11,7 @@ function getAvatarColor(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-export default function ChatScreen({ username, userPhone, initialRoom, initialRoomName, socket, onClearDM, onCall, onVideoCall }) {
+export default function ChatScreen({ username, userPhone, initialRoom, initialRoomName, socket, onClearDM, onPTT }) {
   const [activeRoom, setActiveRoom] = useState(initialRoom || null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -241,18 +241,11 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
           <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{isDM ? 'Aktif Sekarang' : 'Grup Terbuka'}</div>
         </div>
         {isDM && (
-          <div style={{ display: 'flex', gap: '1rem', marginRight: '0.8rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', marginRight: '0.8rem', alignItems: 'center' }}>
              <button onClick={() => {
-                const targetPhone = activeRoom.replace('DM-', '').split('-').find(p => p !== userPhone);
-                if(onCall) onCall(targetPhone, roomName);
-             }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex' }}>
-                <Phone size={20} />
-             </button>
-             <button onClick={() => {
-                const targetPhone = activeRoom.replace('DM-', '').split('-').find(p => p !== userPhone);
-                if(onVideoCall) onVideoCall(targetPhone, roomName);
-             }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex' }}>
-                <Video size={22} />
+                if(onPTT) onPTT(activeRoom);
+             }} style={{ background: '#00a884', padding: '6px 12px', borderRadius: '16px', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>
+                <Mic size={18} /> PTT
              </button>
           </div>
         )}

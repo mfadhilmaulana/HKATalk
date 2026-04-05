@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { QrCode, UserPlus, Search, MessageCircle, Phone, Video, Trash2, LogOut, Check, Users } from 'lucide-react';
+import { Search, UserPlus, Phone, Video, QrCode, Shield, LogOut, Check, MessageCircle, Trash2, Mic, Users } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
-export default function ContactScreen({ username, userPhone, userProfile, onOpenDM, onCallContact, onVideoCallContact, onLogout }) {
+export default function ContactScreen({ username, userPhone, userProfile, onOpenDM, onPTTContact, onLogout }) {
   const [contacts, setContacts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -98,8 +98,7 @@ export default function ContactScreen({ username, userPhone, userProfile, onOpen
                   </div>
                   {/* Action buttons */}
                   <button onClick={() => onOpenDM && onOpenDM(getDMRoom(c.phone), c.display_name)} title="Chat" style={{ background: '#25d366', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><MessageCircle size={13} color="white" /></button>
-                  <button onClick={() => onCallContact && onCallContact(c)} title="Telepon" style={{ background: '#1565c0', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><Phone size={13} color="white" /></button>
-                  <button onClick={() => onVideoCallContact && onVideoCallContact(c)} title="Video Call" style={{ background: '#6a1b9a', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><Video size={13} color="white" /></button>
+                  <button onClick={() => onPTTContact && onPTTContact(c)} title="Push to Talk" style={{ background: '#00a884', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><Mic size={13} color="white" /></button>
                   <button onClick={() => removeContact(c.phone)} title="Hapus" style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', padding: '3px' }}><Trash2 size={14} /></button>
                 </div>
               ))
