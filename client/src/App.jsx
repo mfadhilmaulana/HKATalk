@@ -543,8 +543,8 @@ export default function App() {
           </form>
 
           <div style={{ marginTop: '1.5rem', fontSize: '0.55rem', color: 'var(--text-tertiary)', textAlign: 'center', lineHeight: 1.6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.02em' }}>
-            PT HUTAMA KARYA INFRASTRUKTUR<br/>
-            <span style={{ color: 'var(--text-secondary)' }}>ENTERPRISE COMMUNICATION v8.8</span>
+            PT HAKAASTON<br/>
+            <span style={{ color: 'var(--text-secondary)' }}>ENTERPRISE COMMUNICATION PLATFORM v8.7</span>
           </div>
         </div>
       )}
