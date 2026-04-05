@@ -150,7 +150,27 @@ app.get('/api/messages/:room', async (req, res) => {
        LIMIT 100`,
       [req.params.room]
     );
-    res.json({ messages: result.rows });
+    res.json({ messages: result.rows || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all recent conversations for a user
+app.get('/api/conversations/:phone', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT ON (room) 
+         room, sender_phone, sender_name, msg_type, content, created_at
+       FROM messages 
+       WHERE (room LIKE 'CHAT-%') 
+          OR (room LIKE 'DM-%' AND room LIKE '%' || $1 || '%')
+       ORDER BY room, created_at DESC`,
+      [req.params.phone]
+    );
+    // Sort by latest message overall
+    const conversations = result.rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    res.json({ conversations });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -172,13 +192,22 @@ app.post('/api/messages', async (req, res) => {
 });
 
 // Online status tracking
-const onlineUsers = new Map();
+const onlineUsers = new Map(); // phone -> socketId
 
 // Keep track of users in channels
 const channels = {}; 
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
+
+  // Register user's phone with their socket
+  socket.on('register-user', ({ phone }) => {
+    if (phone) {
+      onlineUsers.set(phone, socket.id);
+      socket.data.phone = phone;
+      console.log(`User registered: ${phone} -> ${socket.id}`);
+    }
+  });
 
   socket.on('join-channel', ({ channel, username }) => {
     // Leave previous rooms & gracefully clean memory
@@ -188,7 +217,6 @@ io.on('connection', (socket) => {
         if (channels[room]) {
           channels[room].delete(socket.id);
         }
-        // Emit user-left so old participants know this socket physically left that channel
         socket.to(room).emit('user-left', { id: socket.id, username: socket.data?.username || 'Unknown' });
       }
     });
@@ -199,37 +227,57 @@ io.on('connection', (socket) => {
     
     if (!channels[channel]) {
       channels[channel] = new Set();
-    } else {
-      // GHOST KILLER V2 (Deduplication): Instantly terminate old ghost sockets with identical usernames
-      Array.from(channels[channel]).forEach(id => {
-        const existingSocket = io.sockets.sockets.get(id);
-        const nameA = existingSocket?.data?.username?.trim().toLowerCase();
-        const nameB = username?.trim().toLowerCase();
-        if (existingSocket && nameA === nameB && id !== socket.id) {
-           existingSocket.leave(channel);
-           channels[channel].delete(id);
-           socket.to(channel).emit('user-left', { id: id, username: existingSocket.data.username });
-           existingSocket.disconnect(true); // Terminate immediately
-        }
-      });
     }
     channels[channel].add(socket.id);
 
     console.log(`${socket.data.username} joined channel: ${channel}`);
-    
-    // Notify others in the room
     socket.to(channel).emit('user-joined', { username: socket.data.username, id: socket.id });
     
-    // Send current participants to the user
     const participants = Array.from(channels[channel]).map(id => {
       const s = io.sockets.sockets.get(id);
       return { id, username: s ? s.data.username : 'Unknown' };
     });
-    
     socket.emit('channel-info', { channel, participants });
   });
 
-  // WebRTC Signals
+  // ── SIGNALING FOR CALLS ──
+
+  socket.on('call-user', ({ targetPhone, type, signalData, callerName }) => {
+    const targetSocketId = onlineUsers.get(targetPhone);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('incoming-call', {
+        from: socket.data.phone,
+        callerName,
+        type,
+        signalData
+      });
+    } else {
+      socket.emit('call-failed', { message: 'User sedang offline' });
+    }
+  });
+
+  socket.on('accept-call', ({ targetPhone, signalData }) => {
+    const targetSocketId = onlineUsers.get(targetPhone);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('call-accepted', { signalData });
+    }
+  });
+
+  socket.on('reject-call', ({ targetPhone }) => {
+    const targetSocketId = onlineUsers.get(targetPhone);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('call-rejected');
+    }
+  });
+
+  socket.on('hangup-call', ({ targetPhone }) => {
+    const targetSocketId = onlineUsers.get(targetPhone);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('call-hungup');
+    }
+  });
+
+  // WebRTC Signals (Original fallback for room-based calling)
   socket.on('webrtc-offer', (data) => {
     socket.to(data.target).emit('webrtc-offer', { ...data, senderId: socket.id, username: socket.data.username });
   });
@@ -242,34 +290,6 @@ io.on('connection', (socket) => {
     socket.to(data.target).emit('webrtc-ice-candidate', { ...data, senderId: socket.id });
   });
 
-  socket.on('sos-alert', () => {
-    if (socket.data.channel) {
-      socket.to(socket.data.channel).emit('sos-alert', { username: socket.data.username });
-    }
-  });
-
-  socket.on('audio-stream', (audioData) => {
-    // Broadcast the audio chunk to all other users in the same room using binary streaming
-    if (socket.data.channel) {
-      socket.to(socket.data.channel).emit('audio-stream', {
-        audioData: audioData,
-        username: socket.data.username,
-        id: socket.id,
-      });
-    }
-  });
-
-  socket.on('video-frame', (data) => {
-    if (socket.data.channel) {
-      // Relay compressed JPEG frame to everyone else in the channel
-      socket.to(socket.data.channel).emit('video-frame', {
-        username: socket.data.username,
-        frame: data.frame,
-        id: socket.id
-      });
-    }
-  });
-
   socket.on('chat-message', (data) => {
     if (socket.data.channel) {
       socket.to(socket.data.channel).emit('chat-message', {
@@ -279,9 +299,25 @@ io.on('connection', (socket) => {
         timestamp: new Date().toISOString()
       });
     }
+    // Also notify target user if it's a DM and they're offline/not in room
+    if (data.room && data.room.startsWith('DM-')) {
+       const parts = data.room.split('-');
+       const targetPhone = parts.find(p => p !== socket.data.phone && p !== 'DM');
+       const targetSocketId = onlineUsers.get(targetPhone);
+       if (targetSocketId) {
+         io.to(targetSocketId).emit('incoming-message-notif', {
+           room: data.room,
+           senderName: socket.data.username,
+           text: data.text
+         });
+       }
+    }
   });
 
   socket.on('disconnecting', () => {
+    if (socket.data.phone) {
+      onlineUsers.delete(socket.data.phone);
+    }
     if (socket.data.channel && channels[socket.data.channel]) {
       channels[socket.data.channel].delete(socket.id);
       socket.to(socket.data.channel).emit('user-left', { id: socket.id, username: socket.data.username });

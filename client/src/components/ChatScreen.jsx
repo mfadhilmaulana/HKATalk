@@ -1,14 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, MapPin, Send, ChevronLeft, ArrowRight, Shield, Plus } from 'lucide-react';
+import { Camera, MapPin, Send, ChevronLeft, ArrowRight, Shield, Plus, MessageSquare, Users, Search, Phone, Video, X } from 'lucide-react';
 import { io } from 'socket.io-client';
-
-const DEFAULT_ROOMS = [
-  { id: 'CHAT-GENERAL', name: 'General', desc: 'Obrolan umum seluruh HKA', emoji: '💬', color: '#25d366' },
-  { id: 'CHAT-OPERASI', name: 'Operasi', desc: 'Koordinasi tim operasional', emoji: '🛠️', color: '#1565c0' },
-  { id: 'CHAT-DARURAT', name: 'Darurat', desc: 'Laporan insiden & SOS', emoji: '🚨', color: '#c62828' },
-  { id: 'CHAT-SOSIAL', name: 'Sosial', desc: 'Ngobrol santai sesama insan', emoji: '☕', color: '#6a1b9a' },
-  { id: 'CHAT-PENGUMUMAN', name: 'Pengumuman', desc: 'Info resmi manajemen', emoji: '📢', color: '#e65100' },
-];
 
 const AVATAR_COLORS = ['#e53935','#8e24aa','#3949ab','#00897b','#f4511e','#6d4c41','#546e7a','#d81b60'];
 function getAvatarColor(name) {
@@ -22,22 +14,32 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
-  const [newRoomName, setNewRoomName] = useState('');
-  const [customRooms, setCustomRooms] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('sitalki_custom_rooms') || '[]'); } catch { return []; }
-  });
+  const [conversations, setConversations] = useState([]);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const socketRef = useRef(null);
 
-  const allRooms = [...DEFAULT_ROOMS, ...customRooms];
+  // Load conversations list
+  const loadConversations = () => {
+    if (!userPhone) return;
+    fetch(`/api/conversations/${userPhone}`)
+      .then(r => r.json())
+      .then(data => setConversations(data.conversations || []))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!activeRoom) loadConversations();
+  }, [activeRoom]);
 
   // Load history from DB when entering a room
   useEffect(() => {
     if (!activeRoom || !username) return;
 
     setLoading(true);
-    // Load persisted messages from DB
     fetch(`/api/messages/${encodeURIComponent(activeRoom)}`)
       .then(r => r.json())
       .then(data => {
@@ -56,10 +58,12 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
       })
       .catch(() => { setMessages([]); setLoading(false); });
 
-    // Connect socket for real-time
     const sock = io();
     socketRef.current = sock;
-    sock.on('connect', () => sock.emit('join-channel', { username, channel: activeRoom }));
+    sock.on('connect', () => {
+      sock.emit('register-user', { phone: userPhone });
+      sock.emit('join-channel', { username, channel: activeRoom });
+    });
     sock.on('chat-message', (data) => {
       setMessages(prev => [...prev, { ...data, self: false }]);
     });
@@ -90,127 +94,142 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
   const handleSendText = (e) => {
     e.preventDefault();
     if (!text.trim() || !socketRef.current) return;
-    const packet = { type: 'text', text: text.trim(), self: true, username, timestamp: new Date().toISOString() };
+    const packet = { type: 'text', text: text.trim(), self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
     socketRef.current.emit('chat-message', packet);
     setMessages(prev => [...prev, packet]);
     saveMessage(packet);
     setText('');
   };
 
-  const handleLocation = () => {
-    if (!navigator.geolocation) { alert("GPS tidak tersedia."); return; }
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const packet = { type: 'location', text: '📍 Lokasi', lat: pos.coords.latitude, lng: pos.coords.longitude, self: true, username, timestamp: new Date().toISOString() };
-      if (socketRef.current) socketRef.current.emit('chat-message', packet);
-      setMessages(prev => [...prev, packet]);
-      saveMessage(packet);
-    }, () => alert("Gagal GPS."));
-  };
-
-  const handleImageCapture = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_W = 600, scale = Math.min(MAX_W / img.width, 1);
-        canvas.width = img.width * scale; canvas.height = img.height * scale;
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        const base64 = canvas.toDataURL('image/jpeg', 0.5);
-        const packet = { type: 'image', text: '📷 Foto', image: base64, self: true, username, timestamp: new Date().toISOString() };
-        if (socketRef.current) socketRef.current.emit('chat-message', packet);
-        setMessages(prev => [...prev, packet]);
-        // Don't save large images to DB to avoid bloat — only save small ones
-        if (base64.length < 200000) saveMessage(packet);
-      };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleAddRoom = (e) => {
+  const handleJoinGroup = (e) => {
     e.preventDefault();
-    const n = newRoomName.trim();
-    if (!n) return;
-    const newRoom = { id: `CHAT-CUSTOM-${n.toUpperCase().replace(/\s/g,'-')}`, name: n, desc: 'Ruang obrolan kustom', emoji: '#️⃣', color: '#37474f' };
-    const updated = [...customRooms, newRoom];
-    setCustomRooms(updated);
-    localStorage.setItem('sitalki_custom_rooms', JSON.stringify(updated));
-    setNewRoomName('');
+    if (!joinCode.trim()) return;
+    const code = joinCode.trim().toUpperCase();
+    setActiveRoom(code.startsWith('CHAT-') ? code : `CHAT-${code}`);
+    setShowJoinModal(false);
+    setJoinCode('');
   };
 
-  // ─── ROOM LIST ───
+  const getChatName = (conv) => {
+    if (conv.room.startsWith('DM-')) {
+      // It's a DM, sender_name might be the OTHER person if they sent the last message
+      // But we should really store the other participant's name if possible
+      return conv.sender_phone === userPhone ? 'Saya' : conv.sender_name;
+    }
+    return conv.room.replace('CHAT-', '');
+  };
+
+  // ─── CONVERSATION LIST VIEW ───
   if (!activeRoom) {
     return (
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
-        <div style={{ background: 'linear-gradient(135deg, #075e54 0%, #128c7e 100%)', color: 'white', padding: '1rem 1rem 0.6rem', flexShrink: 0 }}>
-          <h1 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Chat</h1>
-          <div style={{ fontSize: '0.7rem', opacity: 0.8, marginTop: '2px' }}>💾 History tersimpan • Terenkripsi</div>
+        <div style={{ background: 'linear-gradient(135deg, #075e54 0%, #128c7e 100%)', color: 'white', padding: '1rem', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Chat</h1>
+            <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Hubungkan insan HKA</div>
+          </div>
+          <button onClick={() => setShowJoinModal(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <Plus size={24} />
+          </button>
         </div>
-        <form onSubmit={handleAddRoom} style={{ display: 'flex', gap: '0.3rem', padding: '0.5rem 0.8rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <input placeholder="Buat ruang baru..." value={newRoomName} onChange={(e) => setNewRoomName(e.target.value)} style={{ flex: 1, padding: '7px 10px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.8rem', background: 'var(--bg-tertiary)', color: '#111', outline: 'none' }} />
-          <button type="submit" disabled={!newRoomName.trim()} style={{ background: newRoomName.trim() ? '#075e54' : '#ccc', color: 'white', border: 'none', borderRadius: '8px', padding: '0 10px', display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 600 }}><Plus size={14} /></button>
-        </form>
+
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          <div style={{ padding: '0.4rem 1rem', display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-muted)', fontSize: '0.65rem' }}><Shield size={10} /> End-to-End Encrypted</div>
-          {allRooms.map(room => (
-            <div key={room.id} onClick={() => setActiveRoom(room.id)} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.65rem 1rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', background: room.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>{room.emoji}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.9rem' }}>#{room.name}</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{room.desc}</div>
-              </div>
-              <ArrowRight size={14} color="var(--text-muted)" />
+          {conversations.length === 0 && (
+            <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <MessageSquare size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
+              <p style={{ fontSize: '0.9rem' }}>Belum ada percakapan.<br/>Mulai chat dari menu Kontak atau tekan +</p>
             </div>
-          ))}
+          )}
+
+          {conversations.map((conv, idx) => {
+            const name = getChatName(conv);
+            const isDM = conv.room.startsWith('DM-');
+            const initials = name?.[0]?.toUpperCase() || '?';
+            const color = getAvatarColor(name);
+
+            return (
+              <div key={conv.room} onClick={() => setActiveRoom(conv.room)} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.8rem 1rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+                <div style={{ width: 50, height: 50, borderRadius: '50%', background: isDM ? color : '#128c7e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 800, flexShrink: 0 }}>
+                  {isDM ? initials : <Users size={24} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isDM ? name : `#${name}`}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(conv.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
+                    {conv.sender_phone === userPhone ? 'Anda: ' : `${conv.sender_name}: `}{conv.content}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
+
+        {/* Join Group Modal */}
+        {showJoinModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+            <div style={{ background: 'white', borderRadius: '16px', padding: '1.5rem', width: '100%', maxWidth: '320px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={{ margin: 0, fontWeight: 800 }}>Gabung Grup</h3>
+                <button onClick={() => setShowJoinModal(false)} style={{ background: 'none', border: 'none', color: '#888' }}><X size={20} /></button>
+              </div>
+              <form onSubmit={handleJoinGroup}>
+                <p style={{ fontSize: '0.8rem', color: '#666', marginBottom: '1rem' }}>Masukkan kode grup atau nama divisi untuk bergabung ke percakapan.</p>
+                <input autoFocus placeholder="Contoh: GENERAL atau HC-IT" value={joinCode} onChange={e => setJoinCode(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '1rem', outline: 'none' }} />
+                <button type="submit" style={{ width: '100%', background: '#128c7e', color: 'white', border: 'none', borderRadius: '8px', padding: '10px', fontWeight: 700 }}>GABUNG</button>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
-  // ─── CHAT CONVERSATION ───
-  const room = allRooms.find(r => r.id === activeRoom);
-  const roomName = room?.name || activeRoom.replace('DM-','Chat ');
-  const roomEmoji = room?.emoji || '💬';
-  const roomColor = room?.color || '#25d366';
+  // ─── CHAT CONVERSATION VIEW ───
   const isDM = activeRoom.startsWith('DM-');
+  const roomName = isDM ? (initialRoomName || 'Chat Personal') : activeRoom.replace('CHAT-','');
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#ece5dd' }}>
       {/* Header */}
       <div style={{ background: '#075e54', color: 'white', padding: '0.6rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, zIndex: 10 }}>
-        <button onClick={() => setActiveRoom(null)} style={{ background: 'none', border: 'none', color: 'white', display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '3px' }}><ChevronLeft size={20} /></button>
-        <div style={{ width: 32, height: 32, borderRadius: '50%', background: roomColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>{isDM ? '👤' : roomEmoji}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{isDM ? 'Personal Chat' : `#${roomName}`}</div>
-          <div style={{ fontSize: '0.6rem', opacity: 0.7 }}>💾 History tersimpan</div>
+        <button onClick={() => { setActiveRoom(null); if(onClearDM) onClearDM(); }} style={{ background: 'none', border: 'none', color: 'white', display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '3px' }}><ChevronLeft size={24} /></button>
+        <div style={{ width: 38, height: 38, borderRadius: '50%', background: isDM ? getAvatarColor(roomName) : '#128c7e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: 800, flexShrink: 0 }}>
+          {isDM ? roomName[0].toUpperCase() : <Users size={20} />}
         </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isDM ? roomName : `#${roomName}`}</div>
+          <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{isDM ? 'Aktif Sekarang' : 'Grup Terbuka'}</div>
+        </div>
+        {isDM && (
+          <div style={{ display: 'flex', gap: '0.4rem', marginRight: '0.4rem' }}>
+             <Phone size={18} style={{ opacity: 0.8 }} />
+             <Video size={18} style={{ opacity: 0.8 }} />
+          </div>
+        )}
       </div>
 
       {/* Messages */}
-      <div style={{ flex: 1, minHeight: 0, padding: '0.4rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {loading && <div style={{ alignSelf: 'center', padding: '1rem', color: '#888', fontSize: '0.8rem' }}>Memuat history...</div>}
+      <div style={{ flex: 1, minHeight: 0, padding: '0.6rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {loading && <div style={{ alignSelf: 'center', padding: '1rem', color: '#888', fontSize: '0.8rem', background: 'rgba(255,255,255,0.7)', borderRadius: '10px' }}>Memuat history...</div>}
         
-        {!loading && messages.length === 0 && <div style={{ alignSelf: 'center', padding: '2rem', color: '#888', fontSize: '0.8rem' }}>Belum ada pesan. Mulai percakapan!</div>}
-
         {messages.map((msg, idx) => {
           const isSelf = msg.self;
           const initials = (msg.username || '?')[0].toUpperCase();
           const avatarBg = getAvatarColor(msg.username);
           return (
-            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start', maxWidth: '80%', alignSelf: isSelf ? 'flex-end' : 'flex-start', marginBottom: '2px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', flexDirection: isSelf ? 'row-reverse' : 'row' }}>
-                {!isSelf && <div style={{ width: 22, height: 22, borderRadius: '50%', background: avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.55rem', fontWeight: 700, flexShrink: 0 }}>{initials}</div>}
-                <div style={{ background: isSelf ? '#dcf8c6' : 'white', padding: '4px 6px', borderRadius: isSelf ? '8px 2px 8px 8px' : '2px 8px 8px 8px', boxShadow: '0 1px 1px rgba(0,0,0,0.06)', minWidth: '50px' }}>
-                  {!isSelf && <div style={{ fontSize: '0.6rem', fontWeight: 700, color: avatarBg, marginBottom: '1px' }}>{msg.username}</div>}
-                  {msg.type === 'image' && msg.image && <img src={msg.image} alt="Foto" style={{ width: '100%', borderRadius: '4px', marginBottom: '2px', maxWidth: '180px' }} />}
-                  {msg.type === 'location' && <a href={`https://www.google.com/maps?q=${msg.lat},${msg.lng}`} target="_blank" rel="noreferrer" style={{ color: '#075e54', fontWeight: 600, fontSize: '0.75rem', textDecoration: 'none' }}>📍 Buka Maps</a>}
-                  <div style={{ fontSize: '0.8rem', color: '#111', lineHeight: 1.3, wordBreak: 'break-word' }}>{msg.text}</div>
-                  <div style={{ fontSize: '0.5rem', color: 'rgba(0,0,0,0.35)', textAlign: 'right', marginTop: '1px' }}>
+            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isSelf ? 'flex-end' : 'flex-start', marginBottom: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', flexDirection: isSelf ? 'row-reverse' : 'row' }}>
+                {!isSelf && !isDM && <div style={{ width: 26, height: 26, borderRadius: '50%', background: avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.65rem', fontWeight: 700, flexShrink: 0, marginBottom: '2px' }}>{initials}</div>}
+                <div style={{ background: isSelf ? '#dcf8c6' : 'white', padding: '6px 8px', borderRadius: isSelf ? '8px 2px 8px 8px' : '2px 8px 8px 8px', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', minWidth: '60px', position: 'relative' }}>
+                  {!isSelf && !isDM && <div style={{ fontSize: '0.7rem', fontWeight: 700, color: avatarBg, marginBottom: '2px' }}>{msg.username}</div>}
+                  {msg.type === 'image' && msg.image && <img src={msg.image} alt="Foto" style={{ width: '100%', borderRadius: '6px', marginBottom: '4px', maxWidth: '240px' }} />}
+                  {msg.type === 'location' && <a href={`https://www.google.com/maps?q=${msg.lat},${msg.lng}`} target="_blank" rel="noreferrer" style={{ display: 'block', padding: '8px', background: '#f8f8f8', borderRadius: '6px', color: '#075e54', fontWeight: 700, fontSize: '0.8rem', textDecoration: 'none', marginBottom: '4px', border: '1px solid #eee' }}>📍 Bagikan Lokasi</a>}
+                  <div style={{ fontSize: '0.9rem', color: '#111', lineHeight: 1.4, wordBreak: 'break-word' }}>{msg.text}</div>
+                  <div style={{ fontSize: '0.6rem', color: 'rgba(0,0,0,0.4)', textAlign: 'right', marginTop: '2px', display: 'flex', justifyContent: 'flex-end', gap: '2px' }}>
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    {isSelf && ' ✓✓'}
+                    {isSelf && <span style={{ color: '#34b7f1' }}>✓✓</span>}
                   </div>
                 </div>
               </div>
@@ -221,14 +240,33 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSendText} style={{ display: 'flex', padding: '4px 5px', background: '#f0f0f0', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
-        <button type="button" onClick={() => fileInputRef.current?.click()} style={{ background: 'none', border: 'none', color: '#54656f', display: 'flex', alignItems: 'center', padding: '4px', cursor: 'pointer' }}>
-          <Camera size={18} />
-          <input type="file" accept="image/*" capture="environment" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageCapture} />
+      <form onSubmit={handleSendText} style={{ display: 'flex', padding: '6px 8px', background: '#f0f0f0', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+        <button type="button" onClick={() => fileInputRef.current?.click()} style={{ background: 'none', border: 'none', color: '#54656f', display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+          <Camera size={24} />
+          <input type="file" accept="image/*" capture="environment" ref={fileInputRef} style={{ display: 'none' }} onChange={(e) => {
+            const file = e.target.files[0]; if (!file) return;
+            const r = new FileReader(); r.onload = (ev) => {
+                const img = new Image(); img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_W = 800, scale = Math.min(MAX_W / img.width, 1);
+                    canvas.width = img.width * scale; canvas.height = img.height * scale;
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const base64 = canvas.toDataURL('image/jpeg', 0.6);
+                    const p = { type: 'image', text: '📷 Foto', image: base64, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
+                    socketRef.current?.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
+                }; img.src = ev.target.result;
+            }; r.readAsDataURL(file);
+          }} />
         </button>
-        <button type="button" onClick={handleLocation} style={{ background: 'none', border: 'none', color: '#54656f', display: 'flex', alignItems: 'center', padding: '4px', cursor: 'pointer' }}><MapPin size={18} /></button>
-        <input placeholder="Ketik pesan" value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" style={{ flex: 1, background: 'white', border: 'none', borderRadius: '18px', padding: '7px 12px', fontSize: '0.85rem', color: '#111', outline: 'none' }} />
-        <button type="submit" disabled={!text.trim()} style={{ width: 34, height: 34, borderRadius: '50%', background: text.trim() ? '#00a884' : '#8696a0', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><Send size={14} color="white" /></button>
+        <button type="button" onClick={() => {
+            if (!navigator.geolocation) return;
+            navigator.geolocation.getCurrentPosition(pos => {
+              const p = { type: 'location', text: '📍 Lokasi', lat: pos.coords.latitude, lng: pos.coords.longitude, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
+              socketRef.current?.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
+            });
+        }} style={{ background: 'none', border: 'none', color: '#54656f', display: 'flex', alignItems: 'center', cursor: 'pointer' }}><MapPin size={24} /></button>
+        <input placeholder="Ketik pesan" value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" style={{ flex: 1, background: 'white', border: 'none', borderRadius: '24px', padding: '9px 16px', fontSize: '0.9rem', color: '#111', outline: 'none', boxShadow: '0 1px 1px rgba(0,0,0,0.1)' }} />
+        <button type="submit" disabled={!text.trim()} style={{ width: 44, height: 44, borderRadius: '50%', background: text.trim() ? '#00a884' : '#8696a0', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }}><Send size={20} color="white" /></button>
       </form>
     </div>
   );

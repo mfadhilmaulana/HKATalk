@@ -58,8 +58,10 @@ export default function App() {
 
   const [activeRadio, setActiveRadio] = useState(null);
   const [radioError, setRadioError] = useState(null);
-  const [dmRoom, setDmRoom] = useState(null); // For direct DM from contacts
+  const [dmRoom, setDmRoom] = useState(null);
   const [dmName, setDmName] = useState('');
+  const [incomingCall, setIncomingCall] = useState(null); // { from, callerName, type, signalData }
+  const [activeCall, setActiveCall] = useState(null); // { targetPhone, type, isCaller }
 
   const [messages, setMessages] = useState([]);
   const isRecordingRef = useRef(false);
@@ -78,8 +80,9 @@ export default function App() {
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
-      newSocket.emit('join-channel', { username, channel });
-      setMessages(prev => [...prev, { text: `Tergabung di saluran: ${channel}`, type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
+      newSocket.emit('register-user', { phone: userPhone });
+      if (channel) newSocket.emit('join-channel', { username, channel });
+      setMessages(prev => [...prev, { text: channel ? `Tergabung di saluran: ${channel}` : 'Tersambung ke server', type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
     });
 
     newSocket.on('channel-info', ({ participants }) => setParticipants(participants));
@@ -98,6 +101,34 @@ export default function App() {
     newSocket.on('sos-alert', (data) => {
       setMessages(prev => [...prev, { text: `🚨 DARURAT: ${data.username} MENEKAN TOMBOL SOS!`, type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
       playSiren();
+    });
+
+    newSocket.on('incoming-call', (data) => {
+      setIncomingCall(data);
+      // Play ringing sound (optional)
+    });
+
+    newSocket.on('call-accepted', (data) => {
+      // Logic to actually start WebRTC or move to Meeting
+      setActiveCall(prev => ({ ...prev, accepted: true }));
+    });
+
+    newSocket.on('call-rejected', () => {
+      alert('Panggilan ditolak');
+      setActiveCall(null);
+    });
+
+    newSocket.on('call-hungup', () => {
+      setActiveCall(null);
+      setIncomingCall(null);
+    });
+
+    newSocket.on('incoming-message-notif', (data) => {
+      // In-app notification for messages
+      if (navState !== 'chat') {
+        // Show a small toast or badge (simplified for now)
+        console.log('New message from', data.senderName);
+      }
     });
 
     newSocket.on('audio-stream', (payload) => {
@@ -415,6 +446,42 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {/* Incoming Call Modal */}
+      {incomingCall && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+          <div style={{ background: 'white', borderRadius: '24px', width: '100%', maxWidth: '320px', padding: '2rem', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
+            <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#128c7e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', fontSize: '2rem', fontWeight: 800 }}>
+              {incomingCall.callerName?.[0].toUpperCase()}
+            </div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', marginBottom: '0.5rem' }}>{incomingCall.callerName}</h2>
+            <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '2rem' }}>Memanggil ({incomingCall.type === 'video' ? 'Video' : 'Suara'})...</p>
+            
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem' }}>
+              <button 
+                onClick={() => {
+                  socket?.emit('reject-call', { targetPhone: incomingCall.from });
+                  setIncomingCall(null);
+                }}
+                style={{ width: 64, height: 64, borderRadius: '50%', background: '#ff3b30', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X size={32} />
+              </button>
+              <button 
+                onClick={() => {
+                  socket?.emit('accept-call', { targetPhone: incomingCall.from });
+                  const roomCode = `CALL-${[userPhone, incomingCall.from].sort().join('-')}`;
+                  setIncomingCall(null);
+                  joinChannel(`MEETING-${roomCode}`);
+                }}
+                style={{ width: 64, height: 64, borderRadius: '50%', background: '#25d366', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                {incomingCall.type === 'video' ? <Video size={32} /> : <Phone size={32} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {navState === 'login' && (
         <div className="auth-container">
           <h1 style={{color: 'var(--accent)', fontSize: '2.2rem', marginBottom: '4px'}}>Si Talki HKA</h1>
@@ -504,8 +571,16 @@ export default function App() {
           userPhone={userPhone} 
           userProfile={userProfile} 
           onOpenDM={(room, name) => { setDmRoom(room); setDmName(name); setNavState('chat'); }}
-          onCallContact={(c) => { const code = `CALL-${[userPhone,c.phone].sort().join('-')}`; joinChannel(`MEETING-${code}`); }}
-          onVideoCallContact={(c) => { const code = `VC-${[userPhone,c.phone].sort().join('-')}`; joinChannel(`MEETING-${code}`); }}
+          onCallContact={(c) => { 
+            const code = `CALL-${[userPhone,c.phone].sort().join('-')}`; 
+            socket?.emit('call-user', { targetPhone: c.phone, type: 'voice', callerName: username });
+            joinChannel(`MEETING-${code}`); 
+          }}
+          onVideoCallContact={(c) => { 
+            const code = `VC-${[userPhone,c.phone].sort().join('-')}`; 
+            socket?.emit('call-user', { targetPhone: c.phone, type: 'video', callerName: username });
+            joinChannel(`MEETING-${code}`); 
+          }}
           onLogout={handleLogout} 
         />
       )}
