@@ -1,13 +1,22 @@
 const { Pool } = require('pg');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
-});
+let pool = null;
+
+if (process.env.DATABASE_URL) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+}
 
 async function initDB() {
-  const client = await pool.connect();
+  if (!pool) {
+    console.log('⚠️  No DATABASE_URL — skipping DB init');
+    return;
+  }
+  let client;
   try {
+    client = await pool.connect();
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -30,7 +39,7 @@ async function initDB() {
   } catch (err) {
     console.error('❌ DB init error:', err.message);
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }
 

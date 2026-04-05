@@ -9,9 +9,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from the React frontend build
-app.use(express.static(path.join(__dirname, '../client/dist')));
-
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -31,6 +28,12 @@ if (process.env.DATABASE_URL) {
 
 // ── REST API ──
 
+// Guard: if no pool, return 503 for all API routes
+app.use('/api', (req, res, next) => {
+  if (!pool) return res.status(503).json({ error: 'Database belum dikonfigurasi' });
+  next();
+});
+
 // Register
 app.post('/api/register', async (req, res) => {
   const { phone, display_name, department } = req.body;
@@ -39,11 +42,16 @@ app.post('/api/register', async (req, res) => {
   const avatar_color = colors[Math.floor(Math.random() * colors.length)];
   try {
     const result = await pool.query(
-      'INSERT INTO users (phone, display_name, department, avatar_color) VALUES ($1, $2, $3, $4) ON CONFLICT (phone) DO UPDATE SET display_name=$2, department=$3 RETURNING *',
+      `INSERT INTO users (phone, display_name, department, avatar_color) 
+       VALUES ($1, $2, $3, $4) 
+       ON CONFLICT (phone) DO UPDATE 
+       SET display_name = EXCLUDED.display_name, department = EXCLUDED.department 
+       RETURNING *`,
       [phone, display_name, department || '', avatar_color]
     );
     res.json({ user: result.rows[0] });
   } catch (err) {
+    console.error('Register error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -237,8 +245,14 @@ io.on('connection', (socket) => {
   });
 });
 
-// React routing fallback
+// Serve static files AFTER API routes
+app.use(express.static(path.join(__dirname, '../client/dist')));
+
+// React SPA fallback — only for non-API routes
 app.use((req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'API route not found' });
+  }
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
