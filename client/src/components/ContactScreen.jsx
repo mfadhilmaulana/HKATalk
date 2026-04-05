@@ -13,8 +13,8 @@ export default function ContactScreen({ username, userPhone, userProfile, onOpen
   const [saving, setSaving] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
 
-  useEffect(() => { if (userPhone) loadContacts(); }, [userPhone]);
-  useEffect(() => { if (tab === 'directory') loadAllUsers(); }, [tab]);
+  useEffect(() => { if (userPhone) { loadContacts(); loadAllUsers(); } }, [userPhone]);
+
 
   const loadContacts = () => {
     fetch(`/api/contacts/${userPhone}`).then(r => r.json()).then(data => setContacts(data.contacts || [])).catch(() => {});
@@ -79,8 +79,7 @@ export default function ContactScreen({ username, userPhone, userProfile, onOpen
 
         <div style={{ display: 'flex', gap: '3px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', padding: '3px', border: '1px solid var(--border)' }}>
           {[
-            { key: 'contacts', label: `Kontak (${contacts.length})` },
-            { key: 'directory', label: 'Direktori' },
+            { key: 'contacts', label: `Kontak (${allUsers.length})` },
             { key: 'profile', label: 'Profil' },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key)} style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-sm)', border: 'none', background: tab === t.key ? 'var(--bg-secondary)' : 'transparent', color: tab === t.key ? 'var(--text-primary)' : 'var(--text-tertiary)', fontWeight: 600, fontSize: '0.7rem', cursor: 'pointer', transition: 'all 0.2s var(--ease-out)', boxShadow: tab === t.key ? 'var(--shadow-xs)' : 'none', fontFamily: 'inherit' }}>{t.label}</button>
@@ -89,67 +88,51 @@ export default function ContactScreen({ username, userPhone, userProfile, onOpen
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {/* CONTACTS TAB */}
+        {/* CONTACTS TAB — All registered users */}
         {tab === 'contacts' && (
           <div style={{ padding: '0.6rem' }}>
-            {contacts.length === 0 ? (
-              <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-                <Users size={42} style={{ opacity: 0.3, marginBottom: '1rem' }} />
-                <p style={{ fontSize: '0.85rem' }}>Belum ada kontak terdaftar.</p>
-                <div style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 600, marginTop: '0.5rem', fontSize: '0.85rem' }} onClick={() => setTab('directory')}>Cari di Direktori &rarr;</div>
-              </div>
-            ) : (
-              <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-                {contacts.map((c, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.7rem 0.8rem', borderBottom: i < contacts.length - 1 ? '1px solid var(--border)' : 'none', background: 'transparent' }}>
-                    <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-full)', background: c.avatar_color || 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '1rem', flexShrink: 0 }}>{(c.display_name||'?')[0].toUpperCase()}</div>
-                    <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={() => onOpenDM && onOpenDM(getDMRoom(c.phone), c.display_name)}>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{c.display_name}</div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: '2px', fontFamily: "'JetBrains Mono', monospace" }}>{c.department || c.phone}</div>
-                    </div>
-                    {/* Action buttons */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <button onClick={() => onOpenDM && onOpenDM(getDMRoom(c.phone), c.display_name)} title="Chat" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><MessageCircle size={15} color="var(--accent-blue)" /></button>
-                      <button onClick={() => onPTTContact && onPTTContact(c)} title="Push to Talk" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><Mic size={15} color="var(--accent-emerald)" /></button>
-                      <button onClick={() => removeContact(c.phone)} title="Hapus" style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '6px' }}><Trash2 size={16} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* DIRECTORY TAB */}
-        {tab === 'directory' && (
-          <div style={{ padding: '0.6rem' }}>
+            {/* Search bar */}
             <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'var(--bg-primary)', paddingBottom: '0.6rem' }}>
               <div style={{ display: 'flex', gap: '0.4rem' }}>
-                <input placeholder="Ketik nama atau nomor HP..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()} style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', background: 'var(--bg-card)', color: 'var(--text-primary)', outline: 'none' }} />
-                <button onClick={handleSearch} style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius-md)', padding: '0 16px', cursor: 'pointer', transition: 'all 0.15s var(--ease-spring)' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.94)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><Search size={16} /></button>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--bg-card)' }}>
+                  <Search size={14} color="var(--text-tertiary)" />
+                  <input placeholder="Cari kontak..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ flex: 1, border: 'none', fontSize: '0.85rem', background: 'transparent', color: 'var(--text-primary)', outline: 'none' }} />
+                </div>
               </div>
-              <div style={{ padding: '0.6rem 0.2rem 0', fontSize: '0.6rem', color: 'var(--text-tertiary)', fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.05em' }}>{allUsers.length} PENGGUNA GLOBAL</div>
             </div>
-            
-            <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-              {(searchQuery ? searchResults : allUsers).map((u, i) => {
-                const isContact = contactPhones.has(u.phone);
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.7rem 0.8rem', borderBottom: i < (searchQuery ? searchResults : allUsers).length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)', background: u.avatar_color || 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.9rem', flexShrink: 0 }}>{(u.display_name||'?')[0].toUpperCase()}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{u.display_name}</div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: '2px', fontFamily: "'JetBrains Mono', monospace" }}>{u.department || u.phone}</div>
+
+            {(() => {
+              const filtered = allUsers.filter(u => {
+                if (!searchQuery.trim()) return true;
+                const q = searchQuery.toLowerCase();
+                return (u.display_name || '').toLowerCase().includes(q) || (u.phone || '').includes(q) || (u.department || '').toLowerCase().includes(q);
+              });
+
+              if (filtered.length === 0) return (
+                <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                  <Users size={42} style={{ opacity: 0.3, marginBottom: '1rem' }} />
+                  <p style={{ fontSize: '0.85rem' }}>{searchQuery ? 'Tidak ditemukan.' : 'Belum ada pengguna terdaftar.'}</p>
+                </div>
+              );
+
+              return (
+                <div style={{ background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+                  {filtered.map((u, i) => (
+                    <div key={u.phone} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.7rem 0.8rem', borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none', background: 'transparent' }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)', background: u.avatar_color || 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.95rem', flexShrink: 0 }}>{(u.display_name||'?')[0].toUpperCase()}</div>
+                      <div style={{ flex: 1, cursor: 'pointer', minWidth: 0 }} onClick={() => onOpenDM && onOpenDM(getDMRoom(u.phone), u.display_name)}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{u.display_name}</div>
+                        <div style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)', marginTop: '2px', fontFamily: "'JetBrains Mono', monospace" }}>{u.department || u.phone}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <button onClick={() => onOpenDM && onOpenDM(getDMRoom(u.phone), u.display_name)} title="Chat" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><MessageCircle size={14} color="var(--accent-blue)" /></button>
+                        <button onClick={() => onPTTContact && onPTTContact(u)} title="Push to Talk" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><Mic size={14} color="var(--accent-emerald)" /></button>
+                      </div>
                     </div>
-                    {isContact ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', color: 'var(--accent-emerald)', fontWeight: 700, background: 'rgba(5,150,105,0.1)', padding: '4px 8px', borderRadius: 'var(--radius-full)' }}><CheckCircle2 size={12} /> TERSIMPAN</div>
-                    ) : (
-                      <button onClick={() => addContact(u.phone)} style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--radius-full)', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', transition: 'transform 0.15s' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}><UserPlus size={14} /> TAMBAH</button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
 
