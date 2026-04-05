@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { Radio, MessageSquare, Users, Video, Route, UserCircle } from 'lucide-react';
+import { Radio, MessageSquare, Users, Video, Route, UserCircle, Phone, User2, FolderOpen, ArrowRight, Lock, Mic } from 'lucide-react';
 import './index.css';
 import ChannelScreen from './components/ChannelScreen';
 import ConferenceScreen from './components/ConferenceScreen';
@@ -464,34 +464,34 @@ export default function App() {
 
       {navState === 'login' && (
         <div className="auth-container">
-          {/* Animated Radio Icon */}
-          <div style={{ width: 72, height: 72, borderRadius: '20px', background: 'linear-gradient(135deg, var(--accent) 0%, #b71c1c 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', boxShadow: '0 8px 30px rgba(229,57,53,0.3)', position: 'relative' }}>
-            <Radio size={32} color="white" />
-            <div style={{ position: 'absolute', inset: '-4px', borderRadius: '24px', border: '2px solid rgba(229,57,53,0.2)', animation: 'pulseBg 2s infinite' }} />
+          {/* Icon */}
+          <div style={{ width: 56, height: 56, borderRadius: 'var(--radius-md)', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.2rem', position: 'relative', boxShadow: '0 4px 16px rgba(220,38,38,0.15)' }}>
+            <Radio size={26} color="white" />
+            <div style={{ position: 'absolute', inset: '-6px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--accent-border)' }} />
           </div>
 
-          <h1 style={{ color: 'var(--text-main)', fontSize: '1.8rem', marginBottom: '2px', fontWeight: 900, letterSpacing: '-0.5px' }}>Si Talki <span style={{color:'var(--accent)'}}>HKA</span></h1>
-          <div className="auth-subtitle" style={{ fontWeight: 500, letterSpacing: '0.5px', fontSize: '0.75rem', marginBottom: '1.5rem' }}>Komunikasi Cerdas Seluruh Insan HKA</div>
+          <h1 style={{ color: 'var(--text-primary)', fontSize: '1.5rem', marginBottom: '2px', fontWeight: 800, letterSpacing: '-0.03em' }}>Si Talki <span style={{color:'var(--accent)'}}>HKA</span></h1>
+          <div className="auth-subtitle" style={{ fontWeight: 500, letterSpacing: '0.01em' }}>Komunikasi Cerdas Seluruh Insan HKA</div>
 
           {/* Tab toggle */}
-          <div style={{ display: 'flex', width: '100%', marginBottom: '1rem', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border-light)', background: 'var(--bg-tertiary)' }}>
-            <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); }} style={{ flex: 1, padding: '0.6rem', border: 'none', background: authMode === 'login' ? 'var(--accent)' : 'transparent', color: authMode === 'login' ? 'white' : 'var(--text-muted)', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'inherit', transition: 'all 0.2s', borderRadius: authMode === 'login' ? '8px' : '0' }}>Masuk</button>
-            <button type="button" onClick={() => { setAuthMode('register'); setAuthError(''); }} style={{ flex: 1, padding: '0.6rem', border: 'none', background: authMode === 'register' ? 'var(--accent)' : 'transparent', color: authMode === 'register' ? 'white' : 'var(--text-muted)', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'inherit', transition: 'all 0.2s', borderRadius: authMode === 'register' ? '8px' : '0' }}>Daftar Baru</button>
+          <div style={{ display: 'flex', width: '100%', marginBottom: '0.8rem', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: 'var(--bg-tertiary)' }}>
+            <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); }} style={{ flex: 1, padding: '0.55rem', border: 'none', background: authMode === 'login' ? 'var(--accent)' : 'transparent', color: authMode === 'login' ? 'white' : 'var(--text-tertiary)', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit', transition: 'all 0.2s var(--ease-out)', borderRadius: authMode === 'login' ? '6px' : '0' }}>Masuk</button>
+            <button type="button" onClick={() => { setAuthMode('register'); setAuthError(''); }} style={{ flex: 1, padding: '0.55rem', border: 'none', background: authMode === 'register' ? 'var(--accent)' : 'transparent', color: authMode === 'register' ? 'white' : 'var(--text-tertiary)', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit', transition: 'all 0.2s var(--ease-out)', borderRadius: authMode === 'register' ? '6px' : '0' }}>Daftar Baru</button>
           </div>
 
           <form style={{ width: '100%' }} onSubmit={handleAuth}>
-            <div style={{ position: 'relative', marginBottom: '0.6rem' }}>
-              <input className="form-input" style={{marginBottom: 0, paddingLeft: '2.5rem'}} placeholder="Nomor HP (08xxx)" value={authPhone} onChange={(e) => setAuthPhone(e.target.value)} autoFocus />
-              <span style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1rem' }}>📱</span>
+            <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
+              <input className="form-input" style={{marginBottom: 0, paddingLeft: '2.4rem'}} placeholder="Nomor HP (08xxx)" value={authPhone} onChange={(e) => setAuthPhone(e.target.value)} autoFocus />
+              <Phone size={14} style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
             </div>
             {authMode === 'register' && (
               <>
-                <div style={{ position: 'relative', marginBottom: '0.6rem' }}>
-                  <input className="form-input" style={{marginBottom: 0, paddingLeft: '2.5rem'}} placeholder="Nama Lengkap" value={authName} onChange={(e) => setAuthName(e.target.value)} />
-                  <span style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1rem' }}>👤</span>
+                <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
+                  <input className="form-input" style={{marginBottom: 0, paddingLeft: '2.4rem'}} placeholder="Nama Lengkap" value={authName} onChange={(e) => setAuthName(e.target.value)} />
+                  <User2 size={14} style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
                 </div>
-                <select className="form-input" value={authDept} onChange={(e) => setAuthDept(e.target.value)} style={{color: authDept ? 'var(--text-main)' : 'var(--text-dim)'}}>
-                  <option value="">📁 Pilih Departemen / Unit...</option>
+                <select className="form-input" value={authDept} onChange={(e) => setAuthDept(e.target.value)} style={{color: authDept ? 'var(--text-primary)' : 'var(--text-tertiary)'}}>
+                  <option value="">Pilih Departemen / Unit...</option>
                   <optgroup label="Kantor Pusat">
                     <option>Departemen HC, Pengembangan dan IT</option>
                     <option>Departemen Keuangan, Akuntansi, dan Risiko</option>
@@ -536,15 +536,15 @@ export default function App() {
                 </select>
               </>
             )}
-            {authError && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginBottom: '0.6rem', textAlign: 'center', background: 'rgba(239,68,68,0.1)', padding: '0.5rem', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.2)' }}>{authError}</div>}
-            <button type="submit" className="btn-primary" disabled={authLoading || !authPhone.trim() || (authMode === 'register' && !authName.trim())} style={{ marginTop: '0.3rem' }}>
-              {authLoading ? 'Memproses...' : (authMode === 'register' ? '🚀 Daftar & Masuk' : '🔐 Masuk')}
+            {authError && <div style={{ color: '#ef4444', fontSize: '0.75rem', marginBottom: '0.5rem', textAlign: 'left', background: 'rgba(220,38,38,0.06)', padding: '0.5rem 0.7rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(220,38,38,0.1)' }}>{authError}</div>}
+            <button type="submit" className="btn-primary" disabled={authLoading || !authPhone.trim() || (authMode === 'register' && !authName.trim())} style={{ marginTop: '0.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              {authLoading ? 'Memproses...' : (authMode === 'register' ? <><ArrowRight size={16} /> Daftar dan Masuk</> : <><Lock size={14} /> Masuk</>)}
             </button>
           </form>
 
-          <div style={{ marginTop: '1.5rem', fontSize: '0.65rem', color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.5 }}>
-            PT Hutama Karya Infrastruktur<br/>
-            <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Enterprise Communication Platform v8.7</span>
+          <div style={{ marginTop: '1.5rem', fontSize: '0.55rem', color: 'var(--text-tertiary)', textAlign: 'center', lineHeight: 1.6, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.02em' }}>
+            PT HUTAMA KARYA INFRASTRUKTUR<br/>
+            <span style={{ color: 'var(--text-secondary)' }}>ENTERPRISE COMMUNICATION v8.8</span>
           </div>
         </div>
       )}
