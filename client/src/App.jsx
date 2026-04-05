@@ -56,12 +56,11 @@ export default function App() {
   const [activeFrame, setActiveFrame] = useState(null);
   const localVideoRef = useRef(null);
 
+  const [activeRadio, setActiveRadio] = useState(null);
+  const [radioError, setRadioError] = useState(null);
   const [tab, setTab] = useState('summary');
   const [dmRoom, setDmRoom] = useState(null);
   const [dmName, setDmName] = useState('');
-  const [incomingCall, setIncomingCall] = useState(null); // { from, callerName, type, signalData }
-  const [activeCall, setActiveCall] = useState(null); // { targetPhone, type, isCaller }
-
   const [messages, setMessages] = useState([]);
   const isRecordingRef = useRef(false);
 
