@@ -309,8 +309,25 @@ io.on('connection', (socket) => {
     if (socket.data.channel) {
       socket.to(socket.data.channel).emit('audio-stream', {
         username: socket.data.username,
-        audioData: data
+        audioData: data,
+        channel: socket.data.channel
       });
+      // Standby Auto-Listen mode for DMs
+      if (socket.data.channel.startsWith('DM-')) {
+        const parts = socket.data.channel.split('-');
+        const targetPhone = parts.find(p => p !== socket.data.phone && p !== 'DM');
+        const targetSocketId = onlineUsers.get(targetPhone);
+        if (targetSocketId) {
+          const targetSocket = io.sockets.sockets.get(targetSocketId);
+          if (targetSocket && !targetSocket.rooms.has(socket.data.channel)) {
+            io.to(targetSocketId).emit('audio-stream', {
+              username: socket.data.username,
+              audioData: data,
+              channel: socket.data.channel
+            });
+          }
+        }
+      }
     }
   });
 

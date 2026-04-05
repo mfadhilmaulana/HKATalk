@@ -1,6 +1,7 @@
 export const AUDIO_SAMPLE_RATE = 16000;
 let audioContext = null;
 let masterGainNode = null;
+let staticNoiseNode = null;
 
 export function initAudioContext() {
   if (!audioContext) {
@@ -9,6 +10,40 @@ export function initAudioContext() {
     masterGainNode.connect(audioContext.destination);
   }
   return audioContext;
+}
+
+export function startStaticNoise() {
+  const ctx = initAudioContext();
+  if (staticNoiseNode || !ctx) return;
+  const bufferSize = 2 * ctx.sampleRate;
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const output = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    output[i] = Math.random() * 2 - 1; 
+  }
+  staticNoiseNode = ctx.createBufferSource();
+  staticNoiseNode.buffer = noiseBuffer;
+  staticNoiseNode.loop = true;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 3000;
+  
+  const gain = ctx.createGain();
+  gain.gain.value = 0.05; 
+
+  staticNoiseNode.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination); // bypass master mute
+  staticNoiseNode.start(0);
+}
+
+export function stopStaticNoise() {
+  if (staticNoiseNode) {
+    try { staticNoiseNode.stop(); } catch(e){}
+    staticNoiseNode.disconnect();
+    staticNoiseNode = null;
+  }
 }
 
 export function setSpeakerMute(isMuted) {

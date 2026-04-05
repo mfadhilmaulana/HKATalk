@@ -9,7 +9,7 @@ import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
-import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, playRingtone, stopRingtone, AUDIO_SAMPLE_RATE } from './audioEngine';
+import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, AUDIO_SAMPLE_RATE } from './audioEngine';
 
 let mediaStreamSource = null;
 let scriptNode = null;
@@ -121,11 +121,24 @@ export default function App() {
     newSocket.on('audio-stream', (payload) => {
       const data = payload.audioData;
       
+      // Auto-listen Standby Mode for Personal Walkie-Talkie
+      if (payload.channel && payload.channel.startsWith('DM-')) {
+        setChannel(prev => {
+           if (prev !== payload.channel) {
+             setNavState('talk');
+             newSocket.emit('join-channel', { username, channel: payload.channel });
+             return payload.channel;
+           }
+           return prev;
+        });
+      }
+
       if (data.type === 'start') {
         setActiveSpeaker(payload.username);
         setActiveFrame(null); // Clear old frame
         if (!isRecordingRef.current) {
           playZelloBeep('start');
+          startStaticNoise();
           playTime = initAudioContext().currentTime + 0.1; 
         }
       } 
@@ -133,6 +146,7 @@ export default function App() {
         setActiveSpeaker(null);
         setActiveFrame(null);
         if (!isRecordingRef.current) {
+          stopStaticNoise();
           playZelloBeep('end');
         }
       } 
@@ -213,6 +227,7 @@ export default function App() {
     isRecordingRef.current = true;
     
     playZelloBeep('start');
+    startStaticNoise();
     if (socket) socket.emit('audio-stream', { type: 'start' });
 
     try {
@@ -277,6 +292,7 @@ export default function App() {
     setIsRecording(false);
     isRecordingRef.current = false;
     
+    stopStaticNoise();
     setTimeout(() => { playZelloBeep('end'); }, 100);
     if (socket) socket.emit('audio-stream', { type: 'end' });
 
