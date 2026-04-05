@@ -1,5 +1,9 @@
 {
   "appId": "com.hakaaston.sitalki",
-  "appName": "SiTalkiHKA",
-  "webDir": "dist"
+  "appName": "Si Talki HKA",
+  "webDir": "dist",
+  "server": {
+    "url": "https://hkatalk.onrender.com",
+    "cleartext": true
+  }
 }

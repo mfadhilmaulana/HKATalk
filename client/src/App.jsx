@@ -237,6 +237,11 @@ export default function App() {
   const startRecording = async () => {
     if (isRecordingRef.current) return;
     
+    // Auto-stop radio when PTT is pressed
+    if (activeRadio) {
+      stopRadio();
+    }
+    
     setSpeakerMute(true); 
 
     const ctx = initAudioContext();
