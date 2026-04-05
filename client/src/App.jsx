@@ -56,7 +56,8 @@ export default function App() {
   const [activeFrame, setActiveFrame] = useState(null);
   const localVideoRef = useRef(null);
 
-  const [activeRadio, setActiveRadio] = useState(null); // FIX MISSING STATE!
+  const [activeRadio, setActiveRadio] = useState(null);
+  const [radioError, setRadioError] = useState(null);
 
   const [messages, setMessages] = useState([]);
   const isRecordingRef = useRef(false);
@@ -285,14 +286,20 @@ export default function App() {
     if (activeRadio === station.id) {
       stopRadio();
     } else {
+      radioPlayer.onerror = () => {
+        setActiveRadio(null);
+        setRadioError(station);
+      };
       radioPlayer.src = station.url;
+      radioPlayer.crossOrigin = 'anonymous';
       let playPromise = radioPlayer.play();
       if (playPromise !== undefined) {
         playPromise.then(() => {
           setActiveRadio(station.id);
-        }).catch(err => {
-          alert('Stream Radio sedang gangguan teknis. Coba stasiun lain.');
+          setRadioError(null);
+        }).catch(() => {
           setActiveRadio(null);
+          setRadioError(station);
         });
       }
     }
@@ -423,7 +430,50 @@ export default function App() {
             {authMode === 'register' && (
               <>
                 <input className="form-input" placeholder="Nama Lengkap" value={authName} onChange={(e) => setAuthName(e.target.value)} />
-                <input className="form-input" placeholder="Departemen (opsional)" value={authDept} onChange={(e) => setAuthDept(e.target.value)} />
+                <select className="form-input" value={authDept} onChange={(e) => setAuthDept(e.target.value)} style={{color: authDept ? '#fff' : '#888'}}>
+                  <option value="">Pilih Departemen / Unit...</option>
+                  <optgroup label="Kantor Pusat">
+                    <option>Departemen HC, Pengembangan dan IT</option>
+                    <option>Departemen Keuangan, Akuntansi, dan Risiko</option>
+                    <option>Departemen Operasi I</option>
+                    <option>Departemen Operasi II</option>
+                    <option>Departemen QHSSE</option>
+                    <option>Departemen Satuan Pengawas Intern</option>
+                    <option>Departemen Sekretaris Perusahaan</option>
+                    <option>Unit ITRS</option>
+                    <option>Unit OCSC</option>
+                    <option>Unit SMRK</option>
+                    <option>Unit Bisnis Turunan OM</option>
+                  </optgroup>
+                  <optgroup label="Ruas">
+                    <option>Ruas BTB</option>
+                    <option>Ruas Akses Tanjung Priok</option>
+                    <option>Ruas Bakauheni–Terbanggi Besar</option>
+                    <option>Ruas Bengkulu–Taba Penanjung</option>
+                    <option>Ruas Betung–Jambi</option>
+                    <option>Ruas Binjai–Stabat</option>
+                    <option>Ruas Indralaya–Prabumulih</option>
+                    <option>Ruas Indrapura–Kisaran</option>
+                    <option>Ruas JORRS</option>
+                    <option>Ruas Kuala Tanjung–Parapat</option>
+                    <option>Ruas Medan–Binjai</option>
+                    <option>Ruas Padang–Sicincin</option>
+                    <option>Ruas Palembang–Indralaya</option>
+                    <option>Ruas Pekanbaru–Bangkinang</option>
+                    <option>Ruas Pekanbaru–Dumai</option>
+                    <option>Ruas Sigli–Banda Aceh</option>
+                    <option>Ruas Terbanggi Besar–Kayu Agung</option>
+                  </optgroup>
+                  <optgroup label="Unit Produksi">
+                    <option>UP Bojonegara</option>
+                    <option>UP Indralaya</option>
+                    <option>UP Jabodetabek</option>
+                    <option>UP Muara Fajar</option>
+                    <option>UP Patimban</option>
+                    <option>UP Sei Langsat</option>
+                    <option>UP Stone Crusher Sumatera</option>
+                  </optgroup>
+                </select>
               </>
             )}
             {authError && <div style={{ color: '#c62828', fontSize: '0.85rem', marginBottom: '0.8rem', textAlign: 'center' }}>{authError}</div>}
@@ -443,7 +493,7 @@ export default function App() {
       )}
 
       {navState === 'radio' && (
-        <RadioScreen activeRadio={activeRadio} onPlayRadio={toggleRadio} />
+        <RadioScreen activeRadio={activeRadio} onPlayRadio={toggleRadio} radioError={radioError} onClearError={() => setRadioError(null)} />
       )}
 
       {navState === 'contact' && (

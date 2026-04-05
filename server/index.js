@@ -83,28 +83,39 @@ app.put('/api/profile', async (req, res) => {
   }
 });
 
-// Search users
+// Search users (empty q = show all)
 app.get('/api/users', async (req, res) => {
   const q = req.query.q || '';
   try {
-    const result = await pool.query(
-      "SELECT phone, display_name, department, avatar_color FROM users WHERE display_name ILIKE $1 OR phone ILIKE $1 LIMIT 50",
-      [`%${q}%`]
-    );
+    const sql = q 
+      ? "SELECT phone, display_name, department, avatar_color FROM users WHERE display_name ILIKE $1 OR phone ILIKE $1 ORDER BY display_name LIMIT 100"
+      : "SELECT phone, display_name, department, avatar_color FROM users ORDER BY display_name LIMIT 200";
+    const params = q ? [`%${q}%`] : [];
+    const result = await pool.query(sql, params);
     res.json({ users: result.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Save contact
+// Add contact (TWO-WAY: both sides see each other)
 app.post('/api/contacts', async (req, res) => {
   const { owner_phone, contact_phone } = req.body;
   try {
-    await pool.query(
-      'INSERT INTO contacts (owner_phone, contact_phone) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [owner_phone, contact_phone]
-    );
+    await pool.query('INSERT INTO contacts (owner_phone, contact_phone) VALUES ($1, $2) ON CONFLICT DO NOTHING', [owner_phone, contact_phone]);
+    await pool.query('INSERT INTO contacts (owner_phone, contact_phone) VALUES ($1, $2) ON CONFLICT DO NOTHING', [contact_phone, owner_phone]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Remove contact
+app.delete('/api/contacts', async (req, res) => {
+  const { owner_phone, contact_phone } = req.body;
+  try {
+    await pool.query('DELETE FROM contacts WHERE owner_phone=$1 AND contact_phone=$2', [owner_phone, contact_phone]);
+    await pool.query('DELETE FROM contacts WHERE owner_phone=$1 AND contact_phone=$2', [contact_phone, owner_phone]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -117,7 +128,8 @@ app.get('/api/contacts/:phone', async (req, res) => {
     const result = await pool.query(
       `SELECT u.phone, u.display_name, u.department, u.avatar_color 
        FROM contacts c JOIN users u ON c.contact_phone = u.phone 
-       WHERE c.owner_phone=$1`,
+       WHERE c.owner_phone=$1
+       ORDER BY u.display_name`,
       [req.params.phone]
     );
     res.json({ contacts: result.rows });
@@ -125,6 +137,9 @@ app.get('/api/contacts/:phone', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Online status tracking
+const onlineUsers = new Map(); // phone -> socketId
 
 // Keep track of users in channels
 const channels = {}; 
