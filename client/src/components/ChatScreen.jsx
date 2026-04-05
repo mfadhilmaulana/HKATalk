@@ -26,6 +26,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
   const [editingMsg, setEditingMsg] = useState(null); // { idx, text }
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const [showGpsPopup, setShowGpsPopup] = useState(false);
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const fileInspectionRef = useRef(null);
@@ -40,13 +41,17 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
         const img = new Image(); 
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_W = 800, scale = Math.min(MAX_W / img.width, 1);
+            const MAX_W = 1200, scale = Math.min(MAX_W / img.width, 1);
             canvas.width = img.width * scale; canvas.height = img.height * scale;
-            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-            const base64 = canvas.toDataURL('image/jpeg', 0.6);
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const base64 = canvas.toDataURL('image/jpeg', 0.95);
             
             if (!navigator.geolocation) {
-                alert('GPS tidak didukung di browser ini.'); return;
+                setShowGpsPopup(true);
+                return;
             }
             
             navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -74,6 +79,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
                 if (socket) socket.emit('chat-message', p); 
                 setMessages(prev => [...prev, p]); 
                 saveMessage(p);
+                setShowGpsPopup(false);
             }, () => {
                 alert('Gagal mendapatkan GPS. Pastikan Izin Lokasi diaktifkan.');
             });
@@ -428,6 +434,27 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
         )}
       </div>
 
+      {/* GPS Popup Overlay */}
+      {showGpsPopup && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s var(--ease-out)' }}>
+          <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)', padding: '2rem 1.5rem', textAlign: 'center', maxWidth: '280px', boxShadow: 'var(--shadow-elevated)', border: '1px solid var(--border)', animation: 'slideIn 0.3s var(--ease-out)' }}>
+            <div style={{ width: 56, height: 56, borderRadius: 'var(--radius-full)', background: 'rgba(5,150,105,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', animation: 'breathe 2s ease-in-out infinite' }}>
+              <MapPin size={28} color="var(--accent-emerald)" />
+            </div>
+            <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Mengaktifkan GPS</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '1.2rem' }}>
+              Sedang mendeteksi lokasi Anda untuk melampirkan koordinat GPS pada foto inspeksi lapangan...
+            </div>
+            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', marginBottom: '0.8rem' }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-emerald)', animation: 'breathe 1s ease-in-out infinite' }} />
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-emerald)', animation: 'breathe 1s ease-in-out 0.2s infinite' }} />
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-emerald)', animation: 'breathe 1s ease-in-out 0.4s infinite' }} />
+            </div>
+            <button onClick={() => setShowGpsPopup(false)} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 24px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>Batal</button>
+          </div>
+        </div>
+      )}
+
       {/* Messages */}
       <div style={{ flex: 1, minHeight: 0, padding: '1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
         {loading && <div style={{ alignSelf: 'center', padding: '0.8rem 1.2rem', color: 'var(--text-secondary)', fontSize: '0.7rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-full)', border: '1px solid var(--border)', fontWeight: 600 }}>Memuat histori...</div>}
@@ -592,10 +619,13 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
           const r = new FileReader(); r.onload = (ev) => {
               const img = new Image(); img.onload = () => {
                   const canvas = document.createElement('canvas');
-                  const MAX_W = 800, scale = Math.min(MAX_W / img.width, 1);
+                  const MAX_W = 1200, scale = Math.min(MAX_W / img.width, 1);
                   canvas.width = img.width * scale; canvas.height = img.height * scale;
-                  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-                  const base64 = canvas.toDataURL('image/jpeg', 0.6);
+                  const ctx2 = canvas.getContext('2d');
+                  ctx2.imageSmoothingEnabled = true;
+                  ctx2.imageSmoothingQuality = 'high';
+                  ctx2.drawImage(img, 0, 0, canvas.width, canvas.height);
+                  const base64 = canvas.toDataURL('image/jpeg', 0.85);
                   const p = { type: 'image', text: 'Foto Dikirim', image: base64, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
                   if (socket) socket.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
               }; img.src = ev.target.result;
