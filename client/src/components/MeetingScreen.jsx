@@ -12,8 +12,8 @@ const iceServers = {
 
 export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
   const [peers, setPeers] = useState([]); // {id, stream, username}
-  const localVideoRef = useRef(null);
-  const localStreamRef = useRef(null);
+  const [localStream, setLocalStream] = useState(null); // REAKTIF UNTUK DOM
+  const localStreamRef = useRef(null); // UNTUK LOGIKA WEBRTC SYNCHRONOUS
   const connectionsRef = useRef({}); // RTCPeerConnection map
   
   const [micState, setMicState] = useState(true);
@@ -61,8 +61,8 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
         localStreamRef.current = stream;
       }
       
-      if (localVideoRef.current && !isScreenSharing) {
-        localVideoRef.current.srcObject = localStreamRef.current;
+      if (!isScreenSharing) {
+        setLocalStream(localStreamRef.current);
       }
     } catch (err) {
       alert("Gagal mengakses kamera/mic: " + err.message);
@@ -207,7 +207,7 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
         if (sender && videoTrack) sender.replaceTrack(videoTrack);
       });
-      if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+      setLocalStream(localStreamRef.current);
       setIsScreenSharing(false);
       if (socket) socket.emit('screen-share-status', { status: false });
       setPinnedPeerId(null);
@@ -222,7 +222,7 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
             const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
             if (sender && videoTrack) sender.replaceTrack(videoTrack);
           });
-          if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+          setLocalStream(localStreamRef.current);
           setIsScreenSharing(false);
           if (socket) socket.emit('screen-share-status', { status: false });
           setPinnedPeerId(null);
@@ -233,7 +233,7 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
           if (sender) sender.replaceTrack(screenTrack);
         });
         
-        if (localVideoRef.current) localVideoRef.current.srcObject = screenStream;
+        setLocalStream(screenStream);
         setIsScreenSharing(true);
         if (socket) socket.emit('screen-share-status', { status: true });
         setPinnedPeerId('local'); // Pin my own screen share
@@ -249,7 +249,7 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
   };
 
   const pinnedStream = pinnedPeerId === 'local' 
-    ? { id: 'local', ref: localVideoRef, username: `Anda ${isScreenSharing ? '(Presentasi)' : ''}`, stream: localStreamRef.current }
+    ? { id: 'local', username: `Anda ${isScreenSharing ? '(Presentasi)' : ''}`, stream: localStream }
     : peers.find(p => p.id === pinnedPeerId);
 
   const renderVideoBox = (id, stream, name, isLocal, isPinned) => {
@@ -259,32 +259,28 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
         onClick={() => togglePin(id)}
         style={{ 
           position: 'relative', 
-          background: '#18181b', 
-          borderRadius: isPinned ? '12px' : '8px', 
+          background: 'var(--bg-tertiary)', 
+          borderRadius: isPinned ? '16px' : '10px', 
           overflow: 'hidden',
           width: '100%',
           height: '100%',
           cursor: 'pointer',
-          boxShadow: isPinned ? '0 8px 30px rgba(0,0,0,0.5)' : 'none',
-          border: screenSharerId === id || (isScreenSharing && isLocal) ? '2px solid #25d366' : '1px solid #3f3f46'
+          boxShadow: isPinned ? '0 10px 40px rgba(0,0,0,0.5)' : 'none',
+          border: screenSharerId === id || (isScreenSharing && isLocal) ? '2px solid var(--accent-emerald)' : '1px solid var(--border)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
         }}
       >
-        {isLocal ? (
-          <video 
-            ref={localVideoRef} 
-            autoPlay 
-            playsInline 
-            muted 
-            style={{ width: '100%', height: '100%', objectFit: isScreenSharing ? 'contain' : 'cover', transform: (!isScreenSharing && isFrontCamera) ? 'scaleX(-1)' : 'none' }} 
-          />
-        ) : (
-          <PeerVideo stream={stream} isScreenShare={screenSharerId === id} />
-        )}
-        <div style={{ position: 'absolute', bottom: 8, left: 8, background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 600, backdropFilter: 'blur(4px)' }}>
+        <PeerVideo 
+            stream={stream} 
+            isScreenShare={screenSharerId === id || (isScreenSharing && isLocal)} 
+            flip={isLocal && !isScreenSharing && isFrontCamera}
+            isLocal={isLocal}
+        />
+        <div style={{ position: 'absolute', bottom: 10, left: 10, background: 'rgba(0,0,0,0.7)', padding: '6px 12px', borderRadius: 'var(--radius-full)', fontSize: '0.8rem', fontWeight: 600, color: 'white', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
           {name}
         </div>
         {!isPinned && (
-          <div style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.4)', borderRadius: 4, padding: '2px' }}>
+          <div style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', borderRadius: 'var(--radius-full)', padding: '6px', color: 'white', backdropFilter: 'blur(4px)', border: '1px solid rgba(255,255,255,0.1)' }}>
             <Maximize size={14} />
           </div>
         )}
@@ -335,8 +331,8 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
             }}>
               {/* Local Video in ribbon if not pinned */}
               {pinnedPeerId !== 'local' && (
-                <div style={{ minWidth: '130px', height: '100%', scrollSnapAlign: 'start' }}>
-                  {renderVideoBox('local', null, `Anda`, true, false)}
+                <div style={{ minWidth: '140px', height: '100%', scrollSnapAlign: 'start' }}>
+                  {renderVideoBox('local', localStream, `Anda`, true, false)}
                 </div>
               )}
               {/* Peers in ribbon if not pinned */}
@@ -360,7 +356,7 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
             gap: '8px', 
             overflowY: 'auto'
           }}>
-            {renderVideoBox('local', null, 'Anda', true, false)}
+            {renderVideoBox('local', localStream, 'Anda', true, false)}
             {peers.map(peer => renderVideoBox(peer.id, peer.stream, peer.username, false, false))}
           </div>
         )}
@@ -393,7 +389,7 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
   );
 }
 
-const PeerVideo = ({ stream, isScreenShare }) => {
+const PeerVideo = ({ stream, isScreenShare, flip, isLocal }) => {
   const videoRef = useRef(null);
   
   useEffect(() => {
@@ -407,10 +403,12 @@ const PeerVideo = ({ stream, isScreenShare }) => {
       ref={videoRef} 
       autoPlay 
       playsInline 
+      muted={isLocal}
       style={{ 
         width: '100%', 
         height: '100%', 
-        objectFit: isScreenShare ? 'contain' : 'cover' // Screen share shouldn't be cropped
+        objectFit: isScreenShare ? 'contain' : 'cover', // Screen share shouldn't be cropped
+        transform: flip ? 'scaleX(-1)' : 'none'
       }} 
     />
   );
