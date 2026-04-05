@@ -58,6 +58,8 @@ export default function App() {
 
   const [activeRadio, setActiveRadio] = useState(null);
   const [radioError, setRadioError] = useState(null);
+  const [dmRoom, setDmRoom] = useState(null); // For direct DM from contacts
+  const [dmName, setDmName] = useState('');
 
   const [messages, setMessages] = useState([]);
   const isRecordingRef = useRef(false);
@@ -497,7 +499,15 @@ export default function App() {
       )}
 
       {navState === 'contact' && (
-        <ContactScreen username={username} userPhone={userPhone} userProfile={userProfile} onJoinChannel={joinChannel} onLogout={handleLogout} />
+        <ContactScreen 
+          username={username} 
+          userPhone={userPhone} 
+          userProfile={userProfile} 
+          onOpenDM={(room, name) => { setDmRoom(room); setDmName(name); setNavState('chat'); }}
+          onCallContact={(c) => { const code = `CALL-${[userPhone,c.phone].sort().join('-')}`; joinChannel(`MEETING-${code}`); }}
+          onVideoCallContact={(c) => { const code = `VC-${[userPhone,c.phone].sort().join('-')}`; joinChannel(`MEETING-${code}`); }}
+          onLogout={handleLogout} 
+        />
       )}
 
       {navState === 'meeting' && (
@@ -527,7 +537,7 @@ export default function App() {
       )}
 
       {navState === 'chat' && (
-        <ChatScreen username={username} userPhone={userPhone} />
+        <ChatScreen username={username} userPhone={userPhone} initialRoom={dmRoom} initialRoomName={dmName} onClearDM={() => { setDmRoom(null); setDmName(''); }} />
       )}
       
       {navState !== 'login' && (

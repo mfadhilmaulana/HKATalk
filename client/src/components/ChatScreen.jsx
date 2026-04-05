@@ -17,8 +17,8 @@ function getAvatarColor(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-export default function ChatScreen({ username, userPhone }) {
-  const [activeRoom, setActiveRoom] = useState(null);
+export default function ChatScreen({ username, userPhone, initialRoom, initialRoomName, onClearDM }) {
+  const [activeRoom, setActiveRoom] = useState(initialRoom || null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
