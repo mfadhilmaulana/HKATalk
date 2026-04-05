@@ -52,7 +52,19 @@ async function initDB() {
         image TEXT DEFAULT '',
         lat DOUBLE PRECISION DEFAULT 0,
         lng DOUBLE PRECISION DEFAULT 0,
+        is_edited BOOLEAN DEFAULT FALSE,
+        is_deleted BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    
+    // Room Members / Read Status table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS room_members (
+        room VARCHAR(100) NOT NULL,
+        user_phone VARCHAR(20) NOT NULL,
+        last_read_at TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (room, user_phone)
       );
     `);
     
@@ -61,7 +73,7 @@ async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room, created_at);
     `);
     
-    console.log('✅ PostgreSQL tables ready (users, contacts, messages)');
+    console.log('✅ PostgreSQL tables ready (users, contacts, messages, room_members)');
   } catch (err) {
     console.error('❌ DB init error:', err.message);
   } finally {
