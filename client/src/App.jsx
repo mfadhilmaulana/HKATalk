@@ -409,10 +409,7 @@ export default function App() {
       )}
 
       {navState === 'chat' && (
-        <ChatScreen 
-          messages={messages}
-          onSendMessage={handleSendMessage}
-        />
+        <ChatScreen username={username} />
       )}
       
       {navState !== 'login' && navState !== 'meeting' && (
@@ -423,13 +420,7 @@ export default function App() {
           <div className={`nav-item ${navState === 'conference' ? 'active' : ''}`} onClick={() => setNavState('conference')}>
             <Video size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Rapat</span>
           </div>
-          <div className={`nav-item ${navState === 'chat' ? 'active' : ''}`} onClick={() => {
-            if (!channel || channel.startsWith('MEETING-')) {
-               alert("Pilih saluran PTT / Kontak untuk mulai Chatting!");
-            } else {
-               setNavState('chat');
-            }
-          }}>
+          <div className={`nav-item ${navState === 'chat' ? 'active' : ''}`} onClick={() => setNavState('chat')}>
             <MessageSquare size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Chat</span>
           </div>
           <div className={`nav-item ${navState === 'radio' ? 'active' : ''}`} onClick={() => setNavState('radio')}>
