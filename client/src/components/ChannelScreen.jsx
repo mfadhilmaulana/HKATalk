@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Radio, Plus, LogIn, Search, Star, Building2, MapPin, Factory, Hash, ChevronRight, Mic, Wifi, ArrowRight } from 'lucide-react';
+import { Radio, Plus, LogIn, Search, Star, Building2, MapPin, Factory, Hash, ChevronRight, Mic, Wifi, ArrowRight, Volume2, Users } from 'lucide-react';
 
-export default function ChannelScreen({ onJoinChannel, userProfile }) {
+export default function ChannelScreen({ onJoinChannel, userProfile, activeSpeakers = {}, occupancy = {} }) {
   const [newChannel, setNewChannel] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [search, setSearch] = useState('');
@@ -139,19 +139,49 @@ export default function ChannelScreen({ onJoinChannel, userProfile }) {
               <div style={{ borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
                 {group.items.map((chName, i) => {
                   const isFav = chName === favChannel;
+                  const code = getChannelCode(chName);
+                  const onlineUsers = occupancy[code] || [];
+                  const activeTalkers = activeSpeakers[code] || [];
+                  const isTalking = activeTalkers.length > 0;
+                  
                   return (
-                    <div key={i} onClick={() => onJoinChannel(getChannelCode(chName))} 
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.6rem', borderTop: i > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer', background: isFav ? 'rgba(217,119,6,0.03)' : 'transparent', transition: 'background 0.15s var(--ease-out)' }}>
-                      <div style={{ width: 30, height: 30, borderRadius: '7px', background: isFav ? '#d97706' : group.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: isFav ? 1 : 0.8 }}>
-                        {isFav ? <Star size={12} color="white" /> : <Hash size={12} color="rgba(255,255,255,0.9)" />}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: isFav ? 600 : 500, fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{chName}</div>
-                        <div style={{ fontSize: '0.48rem', color: isFav ? '#d97706' : 'var(--text-tertiary)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', marginTop: '1px' }}>
-                          {isFav ? 'SALURAN ANDA' : 'SALURAN TETAP'}
+                    <div key={i} onClick={() => onJoinChannel(code)} 
+                      style={{ display: 'flex', flexDirection: 'column', padding: '0.5rem 0.6rem', borderTop: i > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer', background: isFav ? 'rgba(217,119,6,0.03)' : (isTalking ? 'rgba(16, 185, 129, 0.05)' : 'transparent'), transition: 'background 0.15s var(--ease-out)' }}>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ width: 30, height: 30, borderRadius: '7px', background: isTalking ? 'var(--accent-emerald)' : (isFav ? '#d97706' : group.accent), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: (isFav || isTalking) ? 1 : 0.8, transition: 'all 0.2s' }}>
+                          {isTalking ? <Volume2 size={14} color="white" className="mic-pulse" /> : (isFav ? <Star size={12} color="white" /> : <Hash size={12} color="rgba(255,255,255,0.9)" />)}
                         </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: (isFav || isTalking) ? 700 : 500, color: isTalking ? 'var(--accent-emerald)' : 'inherit', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{chName}</div>
+                          <div style={{ fontSize: '0.48rem', color: isTalking ? 'var(--accent-emerald)' : (isFav ? '#d97706' : 'var(--text-tertiary)'), fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em', marginTop: '1px' }}>
+                            {isTalking ? 'SEDANG MENGUDARA ⚡' : (isFav ? 'SALURAN ANDA' : 'SALURAN TETAP')}
+                          </div>
+                        </div>
+                        <ChevronRight size={12} color="var(--text-tertiary)" style={{ opacity: 0.4 }} />
                       </div>
-                      <ChevronRight size={12} color="var(--text-tertiary)" style={{ opacity: 0.4 }} />
+
+                      {/* Info Occupancy & Talkers di bawah nama PTT */}
+                      {(onlineUsers.length > 0 || isTalking) && (
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px', marginLeft: '38px' }}>
+                          {isTalking && (
+                             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--accent-emerald)', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '0.45rem', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
+                                <Mic size={8} /> {activeTalkers.join(', ')}
+                             </div>
+                          )}
+                          {onlineUsers.length > 0 && !isTalking && (
+                             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.45rem', fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", border: '1px solid var(--border)' }}>
+                                <Users size={8} /> {onlineUsers.length} ONLINE
+                             </div>
+                          )}
+                          {onlineUsers.length > 0 && isTalking && (
+                             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', color: 'var(--text-tertiary)', fontSize: '0.45rem', fontFamily: "'JetBrains Mono', monospace" }}>
+                                (+{onlineUsers.length} menyimak)
+                             </div>
+                          )}
+                        </div>
+                      )}
+
                     </div>
                   );
                 })}

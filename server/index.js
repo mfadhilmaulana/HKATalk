@@ -212,6 +212,21 @@ const onlineUsers = new Map(); // phone -> socketId
 // Keep track of users in channels
 const channels = {}; 
 
+// Keep track of active PTT speakers
+const activeSpeakers = {}; // channel -> Set of usernames
+
+function broadcastOccupancy() {
+  const occupancy = {};
+  for (const [ch, setObj] of Object.entries(channels)) {
+     if (!ch || ch === 'Lobby') continue;
+     occupancy[ch] = Array.from(setObj).map(id => {
+        const s = io.sockets.sockets.get(id);
+        return s ? s.data.username : 'Unknown';
+     });
+  }
+  io.emit('channel-occupancy-update', occupancy);
+}
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -221,6 +236,7 @@ io.on('connection', (socket) => {
       onlineUsers.set(phone, socket.id);
       socket.data.phone = phone;
       console.log(`User registered: ${phone} -> ${socket.id}`);
+      // Notify online status if needed
     }
   });
 
@@ -253,6 +269,11 @@ io.on('connection', (socket) => {
       return { id, username: s ? s.data.username : 'Unknown' };
     });
     socket.emit('channel-info', { channel, participants });
+    
+    // Broadcast members to the channel so they can show 'Channel Members' list
+    io.to(channel).emit('channel-members', { channel, participants });
+    
+    broadcastOccupancy();
   });
 
   // ── SIGNALING FOR CALLS ──
@@ -313,11 +334,27 @@ io.on('connection', (socket) => {
   });
 
   socket.on('audio-stream', (data) => {
-    if (socket.data.channel) {
-      socket.to(socket.data.channel).emit('audio-stream', {
-        username: socket.data.username,
+    const channel = socket.data.channel;
+    const username = socket.data.username;
+    
+    // Track globally for ChannelScreen indicators
+    if (channel && data.type === 'start') {
+      if (!activeSpeakers[channel]) activeSpeakers[channel] = new Set();
+      activeSpeakers[channel].add(username);
+      io.emit('active-speakers-update', Object.fromEntries(Object.entries(activeSpeakers).map(([k,v]) => [k, Array.from(v)])));
+    } else if (channel && data.type === 'end') {
+      if (activeSpeakers[channel]) {
+        activeSpeakers[channel].delete(username);
+        if (activeSpeakers[channel].size === 0) delete activeSpeakers[channel];
+        io.emit('active-speakers-update', Object.fromEntries(Object.entries(activeSpeakers).map(([k,v]) => [k, Array.from(v)])));
+      }
+    }
+
+    if (channel) {
+      socket.to(channel).emit('audio-stream', {
+        username: username,
         audioData: data,
-        channel: socket.data.channel
+        channel: channel
       });
       // Standby Auto-Listen mode for DMs
       if (socket.data.channel.startsWith('DM-')) {
@@ -400,10 +437,23 @@ io.on('connection', (socket) => {
   socket.on('disconnecting', () => {
     if (socket.data.phone) {
       onlineUsers.delete(socket.data.phone);
+      // UPDATE LAST SEEN WHEN DISCONNECTING
+      if (pool) {
+         pool.query('UPDATE users SET last_seen = NOW() WHERE phone = $1', [socket.data.phone]).catch(()=>{});
+      }
     }
     if (socket.data.channel && channels[socket.data.channel]) {
       channels[socket.data.channel].delete(socket.id);
       socket.to(socket.data.channel).emit('user-left', { id: socket.id, username: socket.data.username });
+      
+      // Cleanup active speaker if they drop while holding button
+      if (activeSpeakers[socket.data.channel] && activeSpeakers[socket.data.channel].has(socket.data.username)) {
+         activeSpeakers[socket.data.channel].delete(socket.data.username);
+         if (activeSpeakers[socket.data.channel].size === 0) delete activeSpeakers[socket.data.channel];
+         io.emit('active-speakers-update', Object.fromEntries(Object.entries(activeSpeakers).map(([k,v]) => [k, Array.from(v)])));
+      }
+      
+      broadcastOccupancy();
     }
   });
 

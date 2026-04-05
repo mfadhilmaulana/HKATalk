@@ -55,7 +55,9 @@ export default function App() {
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
-  const [activeFrame, setActiveFrame] = useState(null);
+  const [globalActiveSpeakers, setGlobalActiveSpeakers] = useState({});
+  const [channelOccupancy, setChannelOccupancy] = useState({});
+  const isRecordingRef = useRef(false);
   const localVideoRef = useRef(null);
 
   const [activeRadio, setActiveRadio] = useState(null);
@@ -64,8 +66,6 @@ export default function App() {
   const [dmRoom, setDmRoom] = useState(null);
   const [dmName, setDmName] = useState('');
   const [messages, setMessages] = useState([]);
-  const isRecordingRef = useRef(false);
-
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
@@ -95,6 +95,14 @@ export default function App() {
 
     newSocket.on('chat-message', (data) => {
        setMessages(prev => [...prev, { ...data, self: false }]);
+    });
+    
+    newSocket.on('active-speakers-update', (data) => {
+       setGlobalActiveSpeakers(data);
+    });
+
+    newSocket.on('channel-occupancy-update', (data) => {
+       setChannelOccupancy(data);
     });
 
     newSocket.on('video-frame', (data) => {
@@ -563,7 +571,12 @@ export default function App() {
       )}
 
       {navState === 'channel' && (
-        <ChannelScreen onJoinChannel={joinChannel} userProfile={userProfile} />
+        <ChannelScreen 
+          onJoinChannel={joinChannel} 
+          userProfile={userProfile} 
+          activeSpeakers={globalActiveSpeakers}
+          occupancy={channelOccupancy}
+        />
       )}
 
       {navState === 'conference' && (

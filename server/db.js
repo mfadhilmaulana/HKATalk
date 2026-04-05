@@ -58,11 +58,8 @@ async function initDB() {
     `);
     
     // Migration: Add is_read if upgrading from older version
-    try {
-      await client.query('ALTER TABLE messages ADD COLUMN is_read BOOLEAN DEFAULT FALSE;');
-    } catch (e) {
-      // Column might already exist, ignore error
-    }
+    try { await client.query('ALTER TABLE messages ADD COLUMN is_read BOOLEAN DEFAULT FALSE;'); } catch (e) {}
+    try { await client.query('ALTER TABLE users ADD COLUMN last_seen TIMESTAMP DEFAULT NOW();'); } catch (e) {}
     
     // Index on room for fast history lookups
     await client.query(`
