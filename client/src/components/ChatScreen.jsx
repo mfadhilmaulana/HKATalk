@@ -225,8 +225,8 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
   }
 
   // ─── CHAT CONVERSATION VIEW ───
-  const isDM = activeRoom.startsWith('DM-');
-  const roomName = isDM ? (initialRoomName || 'Chat Personal') : activeRoom.replace('CHAT-','');
+  const isDM = activeRoom?.startsWith('DM-');
+  const roomName = isDM ? (initialRoomName || 'Chat Personal') : (activeRoom || '').replace('CHAT-','');
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#ece5dd' }}>
@@ -234,7 +234,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
       <div style={{ background: '#075e54', color: 'white', padding: '0.6rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, zIndex: 10 }}>
         <button onClick={() => { setActiveRoom(null); if(onClearDM) onClearDM(); }} style={{ background: 'none', border: 'none', color: 'white', display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '3px' }}><ChevronLeft size={24} /></button>
         <div style={{ width: 38, height: 38, borderRadius: '50%', background: isDM ? getAvatarColor(roomName) : '#128c7e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: 800, flexShrink: 0 }}>
-          {isDM ? roomName[0].toUpperCase() : <Users size={20} />}
+          {isDM ? (roomName?.[0] || 'C').toUpperCase() : <Users size={20} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isDM ? roomName : `#${roomName}`}</div>
@@ -257,7 +257,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
         
         {messages.map((msg, idx) => {
           const isSelf = msg.self;
-          const initials = (msg.username || '?')[0].toUpperCase();
+          const initials = ((msg.username && typeof msg.username === 'string' && msg.username.length > 0) ? msg.username : '?')[0].toUpperCase();
           const avatarBg = getAvatarColor(msg.username);
           return (
             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isSelf ? 'flex-end' : 'flex-start', marginBottom: '2px' }}>
