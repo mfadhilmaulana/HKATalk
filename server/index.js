@@ -335,7 +335,7 @@ io.on('connection', (socket) => {
     if (socket.data.channel) {
       socket.to(socket.data.channel).emit('video-frame', {
         username: socket.data.username,
-        frame: data
+        frame: data.frame
       });
     }
   });
