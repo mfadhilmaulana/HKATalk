@@ -1,35 +1,26 @@
 import React from 'react';
-import { ChevronLeft, Mic, Radio, Video, VideoOff } from 'lucide-react';
+import { ChevronLeft, Mic, Radio, Video, VideoOff, AlertTriangle } from 'lucide-react';
 import AudioVisualizer from './AudioVisualizer';
 
 export default function TalkScreen({ 
-  channel, 
-  onLeave, 
-  participants, 
-  activeSpeaker,
-  activeFrame,
-  isVideoEnabled,
-  toggleVideo,
-  localVideoRef,
-  onStartPTT,
-  onStopPTT,
-  onSOS,
-  isRecording
+  channel, onLeave, participants, activeSpeaker,
+  activeFrame, isVideoEnabled, toggleVideo, localVideoRef,
+  onStartPTT, onStopPTT, onSOS, isRecording
 }) {
 
   return (
     <div className="talk-screen">
       <div className="zello-header">
         <button className="zello-header-back" onClick={onLeave}>
-          <ChevronLeft size={24} />
+          <ChevronLeft size={20} />
         </button>
         <div style={{ textAlign: 'center', flex: 1 }}>
-          <h1 style={{fontSize: '1.1rem'}}>{(channel || '').toUpperCase()}</h1>
+          <h1 style={{fontSize: '0.95rem'}}>{(channel || '').toUpperCase()}</h1>
           <div className="subtitle">
-            <Radio size={10} style={{marginRight: '2px'}} /> {participants.length} Active Nodes
+            <Radio size={9} /> {participants.length} ACTIVE NODES
           </div>
         </div>
-        <div style={{width: '24px'}}></div>
+        <div style={{width: '34px'}} />
       </div>
 
       <div style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', gap: '0.5rem' }}>
@@ -37,46 +28,47 @@ export default function TalkScreen({
         {/* Incoming PTT Video Feed */}
         {activeSpeaker && activeFrame ? (
           <div style={{width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1}}>
-             <img src={activeFrame} alt="Incoming video frame" style={{ width: '100%', maxWidth: '320px', borderRadius: '16px', border: '2px solid var(--accent)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', imageRendering: 'auto', objectFit: 'cover' }} />
-             <div style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>📹 {activeSpeaker}</div>
+             <img src={activeFrame} alt="Incoming video frame" style={{ width: '100%', maxWidth: '300px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-elevated)', imageRendering: 'auto', objectFit: 'cover' }} />
+             <div style={{ marginTop: '6px', fontSize: '0.6rem', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'JetBrains Mono', monospace", display: 'flex', alignItems: 'center', gap: '4px' }}>
+               <Video size={10} /> {activeSpeaker}
+             </div>
           </div>
         ) : (
           <>
             {!isRecording && !activeSpeaker && (
-              <div style={{ opacity: 0.3, textAlign: 'center' }}>
-                <Radio size={80} style={{margin: '0 auto', display: 'block'}} />
-                <br />
-                Menunggu Komunikasi...
+              <div style={{ opacity: 0.15, textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <Radio size={72} style={{margin: '0 auto', display: 'block'}} />
+                <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', fontWeight: 500, letterSpacing: '0.02em' }}>Menunggu Komunikasi</div>
               </div>
             )}
           </>
         )}
 
-        {/* Audio Visualizer — shows when talking or receiving */}
-        <div style={{ width: '100%', maxWidth: '340px', position: (activeSpeaker && activeFrame) ? 'relative' : 'relative' }}>
+        {/* Audio Visualizer */}
+        <div style={{ width: '100%', maxWidth: '320px' }}>
           <AudioVisualizer isRecording={isRecording} activeSpeaker={activeSpeaker} />
         </div>
 
-        {/* Local Camera Preview (Tiny) */}
-        <div style={{ position: 'absolute', top: '10px', right: '10px', width: '80px', height: '100px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', overflow: 'hidden', border: isVideoEnabled ? '2px solid var(--accent-secondary)' : 'none' }}>
+        {/* Local Camera Preview */}
+        <div style={{ position: 'absolute', top: '8px', right: '8px', width: '72px', height: '92px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: isVideoEnabled ? '2px solid var(--accent-secondary)' : '1px solid var(--border)', boxShadow: 'var(--shadow-card)' }}>
            <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', display: isVideoEnabled ? 'block' : 'none' }} />
-           {!isVideoEnabled && <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center'}}><VideoOff size={20} color="gray" /></div>}
+           {!isVideoEnabled && <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center'}}><VideoOff size={18} color="var(--text-tertiary)" /></div>}
         </div>
       </div>
 
       <div className="ptt-area" style={{ position: 'relative' }}>
 
-        {/* SOS Alarm Button */}
+        {/* SOS */}
         <button 
           onClick={onSOS}
-          style={{ position:'absolute', top: '10px', left: '20px', background: 'red', color: 'white', border: '2px solid darkred', borderRadius: '50%', width:'55px', height:'55px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 20px rgba(255,0,0,0.6)', cursor:'pointer', zIndex: 10, fontWeight: 'bold', fontSize: '0.9rem' }}>
-          SOS
+          style={{ position:'absolute', top: '10px', left: '16px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '50%', width:'48px', height:'48px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 8px rgba(220,38,38,0.15)', cursor:'pointer', zIndex: 10, transition: 'transform 0.15s var(--ease-spring)' }}>
+          <AlertTriangle size={18} />
         </button>
 
         <button 
           onClick={toggleVideo}
-          style={{ position:'absolute', top: '10px', right: '20px', background: isVideoEnabled ? 'var(--accent)' : 'white', color: isVideoEnabled ? 'white' : 'gray', border: '1px solid var(--border)', borderRadius: '50%', width:'50px', height:'50px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 10px rgba(0,0,0,0.1)', cursor:'pointer', zIndex: 10 }}>
-          {isVideoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+          style={{ position:'absolute', top: '10px', right: '16px', background: isVideoEnabled ? 'var(--accent-blue)' : 'var(--bg-tertiary)', color: isVideoEnabled ? 'white' : 'var(--text-tertiary)', border: '1px solid var(--border)', borderRadius: '50%', width:'48px', height:'48px', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'var(--shadow-xs)', cursor:'pointer', zIndex: 10, transition: 'all 0.2s var(--ease-out)' }}>
+          {isVideoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
         </button>
 
         <div className="ptt-wrapper">
@@ -87,15 +79,13 @@ export default function TalkScreen({
           )}
           <button 
             className={`ptt-button ${isRecording ? 'active' : ''}`}
-            onMouseDown={onStartPTT}
-            onMouseUp={onStopPTT}
-            onMouseLeave={onStopPTT}
+            onMouseDown={onStartPTT} onMouseUp={onStopPTT} onMouseLeave={onStopPTT}
             onTouchStart={(e) => { e.preventDefault(); onStartPTT(); }}
             onTouchEnd={(e) => { e.preventDefault(); onStopPTT(); }}
             onTouchCancel={(e) => { e.preventDefault(); onStopPTT(); }}
             onContextMenu={(e) => e.preventDefault()}
           >
-            <Mic size={54} color={isRecording ? 'black' : 'white'} />
+            <Mic size={48} color={isRecording ? '#111827' : 'white'} />
           </button>
         </div>
       </div>
