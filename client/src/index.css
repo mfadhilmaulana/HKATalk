@@ -176,8 +176,9 @@ body {
   padding: 0.2rem 0.5rem;
   border-radius: var(--radius-sm);
   position: relative;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .nav-item.active {

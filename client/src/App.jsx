@@ -620,19 +620,19 @@ export default function App() {
       {navState !== 'login' && (
         <div className="bottom-nav">
           <div className={`nav-item ${(navState === 'channel' || navState === 'talk') ? 'active' : ''}`} onClick={() => setNavState((channel && !channel.startsWith('MEETING-')) ? 'talk' : 'channel')}>
-            <Route size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Saluran</span>
+            <Route size={20} /> <span style={{ marginTop: '2px' }}>Saluran</span>
           </div>
           <div className={`nav-item ${navState === 'conference' ? 'active' : ''}`} onClick={() => setNavState('conference')}>
-            <Video size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Rapat</span>
+            <Video size={20} /> <span style={{ marginTop: '2px' }}>Rapat</span>
           </div>
           <div className={`nav-item ${navState === 'chat' ? 'active' : ''}`} onClick={() => setNavState('chat')}>
-            <MessageSquare size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Chat</span>
+            <MessageSquare size={20} /> <span style={{ marginTop: '2px' }}>Chat</span>
           </div>
           <div className={`nav-item ${navState === 'radio' ? 'active' : ''}`} onClick={() => setNavState('radio')}>
-            <Radio size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Radio</span>
+            <Radio size={20} /> <span style={{ marginTop: '2px' }}>Radio</span>
           </div>
           <div className={`nav-item ${navState === 'contact' ? 'active' : ''}`} onClick={() => setNavState('contact')}>
-            <Users size={20} /> <span style={{fontSize: '0.7rem', marginTop: '4px'}}>Kontak</span>
+            <Users size={20} /> <span style={{ marginTop: '2px' }}>Kontak</span>
           </div>
         </div>
       )}
