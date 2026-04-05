@@ -228,7 +228,6 @@ export default function App() {
     isRecordingRef.current = true;
     
     playZelloBeep('start');
-    startStaticNoise();
     if (socket) socket.emit('audio-stream', { type: 'start' });
 
     try {
@@ -296,7 +295,6 @@ export default function App() {
     setIsRecording(false);
     isRecordingRef.current = false;
     
-    stopStaticNoise();
     setTimeout(() => { playZelloBeep('end'); }, 100);
     if (socket) socket.emit('audio-stream', { type: 'end' });
 
