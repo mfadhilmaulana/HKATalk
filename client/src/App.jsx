@@ -487,7 +487,7 @@ export default function App() {
       )}
 
       {navState === 'channel' && (
-        <ChannelScreen onJoinChannel={joinChannel} />
+        <ChannelScreen onJoinChannel={joinChannel} userProfile={userProfile} />
       )}
 
       {navState === 'conference' && (
