@@ -144,7 +144,7 @@ app.get('/api/contacts/:phone', async (req, res) => {
 app.get('/api/messages/:room', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT sender_phone, sender_name, msg_type, content, image, lat, lng, created_at 
+      `SELECT sender_phone, sender_name, msg_type, content, image, lat, lng, is_read, created_at 
        FROM messages WHERE room=$1 
        ORDER BY created_at ASC 
        LIMIT 100`,
@@ -161,7 +161,8 @@ app.get('/api/conversations/:phone', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT DISTINCT ON (room) 
-         room, sender_phone, sender_name, msg_type, content, created_at
+         room, sender_phone, sender_name, msg_type, content, created_at,
+         COALESCE((SELECT COUNT(*) FROM messages m2 WHERE m2.room = messages.room AND m2.sender_phone != $1 AND m2.is_read = false), 0) as unread_count
        FROM messages 
        WHERE (room LIKE 'CHAT-%') 
           OR (room LIKE 'DM-%' AND room LIKE '%' || $1 || '%')
@@ -184,6 +185,20 @@ app.post('/api/messages', async (req, res) => {
       `INSERT INTO messages (room, sender_phone, sender_name, msg_type, content, image, lat, lng) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [room, sender_phone || '', sender_name || '', msg_type || 'text', content || '', image || '', lat || 0, lng || 0]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark messages as read
+app.put('/api/messages/read', async (req, res) => {
+  const { room, reader_phone } = req.body;
+  try {
+    await pool.query(
+      `UPDATE messages SET is_read = true WHERE room = $1 AND sender_phone != $2 AND is_read = false`,
+      [room, reader_phone]
     );
     res.json({ ok: true });
   } catch (err) {
@@ -288,6 +303,24 @@ io.on('connection', (socket) => {
 
   socket.on('webrtc-ice-candidate', (data) => {
     socket.to(data.target).emit('webrtc-ice-candidate', { ...data, senderId: socket.id });
+  });
+
+  socket.on('message-read', (data) => {
+    // Notify sender that their messages in the room were read
+    const senderSocketId = onlineUsers.get(data.senderPhone);
+    if (senderSocketId) {
+      io.to(senderSocketId).emit('messages-marked-read', {
+        room: data.room,
+        readerPhone: socket.data.phone
+      });
+    }
+    // Also notify other people in the room (for group chat)
+    if (data.room) {
+      socket.to(data.room).emit('messages-marked-read', {
+        room: data.room,
+        readerPhone: socket.data.phone
+      });
+    }
   });
 
   socket.on('chat-message', (data) => {

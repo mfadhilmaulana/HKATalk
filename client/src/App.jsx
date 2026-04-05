@@ -9,6 +9,7 @@ import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
+import CallScreen from './components/CallScreen';
 import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, AUDIO_SAMPLE_RATE } from './audioEngine';
 
 let mediaStreamSource = null;
@@ -67,8 +68,8 @@ export default function App() {
   const isRecordingRef = useRef(false);
 
   useEffect(() => {
-    if (!username || !channel) return;
-    if (socket) return; // Prevent double connections if already active
+    if (!username || !userPhone) return;
+    if (socket) return; // Prevent double connections
 
     initAudioContext().resume();
     
@@ -81,8 +82,6 @@ export default function App() {
 
     newSocket.on('connect', () => {
       newSocket.emit('register-user', { phone: userPhone });
-      if (channel) newSocket.emit('join-channel', { username, channel });
-      setMessages(prev => [...prev, { text: channel ? `Tergabung di saluran: ${channel}` : 'Tersambung ke server', type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
     });
 
     newSocket.on('channel-info', ({ participants }) => setParticipants(participants));
@@ -181,12 +180,16 @@ export default function App() {
     });
 
     return () => {
-      newSocket.disconnect();
-      setSocket(null);
-      setParticipants([]);
-    };
-  }, [navState, channel, username]);
+       // We don't disconnect socket easily anymore to let signaling work in background
+    }
+  }, [username, userPhone]);
 
+  useEffect(() => {
+    if (socket && channel && username) {
+      socket.emit('join-channel', { username, channel });
+      setMessages(prev => [...prev, { text: `Tergabung di saluran: ${channel}`, type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
+    }
+  }, [socket, channel, username]);
 
   const toggleVideo = async () => {
     if (isVideoEnabled) {
@@ -416,6 +419,8 @@ export default function App() {
     setMessages([]); 
     if (ch.startsWith('MEETING-')) {
       setNavState('meeting');
+    } else if (ch.startsWith('CALL-') || ch.startsWith('VC-')) {
+      // Retain current navState; CallScreen overlay will render on top
     } else {
       setNavState('talk');
     }
@@ -470,8 +475,9 @@ export default function App() {
                 onClick={() => {
                   socket?.emit('accept-call', { targetPhone: incomingCall.from });
                   const roomCode = `CALL-${[userPhone, incomingCall.from].sort().join('-')}`;
+                  setActiveCall({ targetPhone: incomingCall.from, type: incomingCall.type, isCaller: false, accepted: true, callerName: incomingCall.callerName, roomCode });
                   setIncomingCall(null);
-                  joinChannel(`MEETING-${roomCode}`);
+                  joinChannel(roomCode); // Join the socket room for signaling, but don't redirect navState if we handle it cleanly
                 }}
                 style={{ width: 64, height: 64, borderRadius: '50%', background: '#25d366', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
               >
@@ -480,6 +486,19 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeCall && (
+         <CallScreen
+           activeCall={activeCall}
+           userPhone={userPhone}
+           username={username}
+           socket={socket}
+           onEndCall={() => {
+             setActiveCall(null);
+             leaveChannel();
+           }}
+         />
       )}
 
       {navState === 'login' && (
@@ -572,14 +591,16 @@ export default function App() {
           userProfile={userProfile} 
           onOpenDM={(room, name) => { setDmRoom(room); setDmName(name); setNavState('chat'); }}
           onCallContact={(c) => { 
-            const code = `CALL-${[userPhone,c.phone].sort().join('-')}`; 
+            const roomCode = `CALL-${[userPhone,c.phone].sort().join('-')}`; 
             socket?.emit('call-user', { targetPhone: c.phone, type: 'voice', callerName: username });
-            joinChannel(`MEETING-${code}`); 
+            setActiveCall({ targetPhone: c.phone, type: 'voice', isCaller: true, accepted: false, callerName: c.display_name, roomCode });
+            joinChannel(roomCode); 
           }}
           onVideoCallContact={(c) => { 
-            const code = `VC-${[userPhone,c.phone].sort().join('-')}`; 
+            const roomCode = `VC-${[userPhone,c.phone].sort().join('-')}`; 
             socket?.emit('call-user', { targetPhone: c.phone, type: 'video', callerName: username });
-            joinChannel(`MEETING-${code}`); 
+            setActiveCall({ targetPhone: c.phone, type: 'video', isCaller: true, accepted: false, callerName: c.display_name, roomCode });
+            joinChannel(roomCode); 
           }}
           onLogout={handleLogout} 
         />

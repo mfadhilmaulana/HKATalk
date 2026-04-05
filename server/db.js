@@ -52,9 +52,17 @@ async function initDB() {
         image TEXT DEFAULT '',
         lat DOUBLE PRECISION DEFAULT 0,
         lng DOUBLE PRECISION DEFAULT 0,
+        is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+    
+    // Migration: Add is_read if upgrading from older version
+    try {
+      await client.query('ALTER TABLE messages ADD COLUMN is_read BOOLEAN DEFAULT FALSE;');
+    } catch (e) {
+      // Column might already exist, ignore error
+    }
     
     // Index on room for fast history lookups
     await client.query(`
