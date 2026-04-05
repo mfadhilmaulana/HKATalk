@@ -246,7 +246,7 @@ export default function App() {
     if (socket) socket.emit('audio-stream', { type: 'start' });
 
     try {
-      if (!globalStream) {
+      if (!globalStream || !globalStream.active || globalStream.getAudioTracks().some(t => t.readyState === 'ended')) {
         globalStream = await navigator.mediaDevices.getUserMedia({ 
           audio: { 
             echoCancellation: true, 
@@ -271,7 +271,7 @@ export default function App() {
         }
         rms = Math.sqrt(rms / float32Array.length);
         
-        if (rms < 0.03) {
+        if (rms < 0.01) {
           return; 
         }
 
