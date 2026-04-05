@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, MapPin, Send, ChevronLeft, ArrowRight, Shield, Plus, MessageSquare, Users, Search, Phone, Video, X, Zap, Mic, Check, CheckCheck, Image as ImageIcon } from 'lucide-react';
+import { Camera, MapPin, Send, ChevronLeft, ArrowRight, Shield, Plus, MessageSquare, Users, Search, Phone, Video, X, Zap, Mic, Check, CheckCheck, Image as ImageIcon, Pencil, Trash2, MoreVertical } from 'lucide-react';
 
 const QUICK_REPLIES = ['Siap!', 'Dimengerti.', 'Sedang cek ke lokasi.', 'Selesai.', 'Aman terkendali.', 'Mohon tunggu...'];
 
@@ -20,10 +20,18 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   
-  const [chatFilter, setChatFilter] = useState('Semua'); // 'Semua' | 'Personal' | 'Grup'
+  const [chatFilter, setChatFilter] = useState('Semua');
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null); // { idx, x, y }
+  const [editingMsg, setEditingMsg] = useState(null); // { idx, text }
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const fileInspectionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const voiceChunksRef = useRef([]);
+  const voiceTimerRef = useRef(null);
 
   const handleInspectionPhoto = (e) => {
     const file = e.target.files[0]; if (!file) return;
@@ -104,7 +112,9 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
           username: m.sender_name,
           timestamp: m.created_at,
           self: m.sender_phone === userPhone,
-          is_read: m.is_read
+          is_read: m.is_read,
+          id: m.id,
+          edited: m.edited
         }));
         setMessages(history);
         setLoading(false);
@@ -178,6 +188,87 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
     setMessages(prev => [...prev, packet]);
     saveMessage(packet);
     setText('');
+  };
+
+  const handleEditMessage = async (idx) => {
+    const msg = messages[idx];
+    if (!msg || !msg.id) return;
+    setEditingMsg({ idx, text: msg.text });
+    setText(msg.text);
+    setContextMenu(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMsg || !text.trim()) return;
+    const msg = messages[editingMsg.idx];
+    try {
+      await fetch(`/api/messages/${msg.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text })
+      });
+      setMessages(prev => prev.map((m, i) => i === editingMsg.idx ? { ...m, text, edited: true } : m));
+    } catch {}
+    setEditingMsg(null);
+    setText('');
+  };
+
+  const handleDeleteMessage = async (idx) => {
+    const msg = messages[idx];
+    if (!msg || !msg.id) return;
+    if (!confirm('Hapus pesan ini?')) return;
+    try {
+      await fetch(`/api/messages/${msg.id}`, { method: 'DELETE' });
+      setMessages(prev => prev.filter((_, i) => i !== idx));
+    } catch {}
+    setContextMenu(null);
+  };
+
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      voiceChunksRef.current = [];
+      recorder.ondataavailable = (e) => voiceChunksRef.current.push(e.data);
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(voiceChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result;
+          const duration = voiceSeconds;
+          const packet = { type: 'voice', text: `🎤 Pesan Suara (${duration}d)`, voice: base64, self: true, username, timestamp: new Date().toISOString(), room: activeRoom, is_read: false };
+          if (socket) socket.emit('chat-message', packet);
+          setMessages(prev => [...prev, packet]);
+          saveMessage({ ...packet, type: 'voice' });
+        };
+        reader.readAsDataURL(blob);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsVoiceRecording(true);
+      setVoiceSeconds(0);
+      voiceTimerRef.current = setInterval(() => setVoiceSeconds(s => s + 1), 1000);
+    } catch {}
+  };
+
+  const stopVoiceRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    clearInterval(voiceTimerRef.current);
+    setIsVoiceRecording(false);
+  };
+
+  const cancelVoiceRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+    }
+    clearInterval(voiceTimerRef.current);
+    setIsVoiceRecording(false);
+    voiceChunksRef.current = [];
   };
 
   const handleJoinGroup = (e) => {
@@ -346,7 +437,10 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
           const initials = ((msg.username && typeof msg.username === 'string' && msg.username.length > 0) ? msg.username : '?')[0].toUpperCase();
           const avatarBg = getAvatarColor(msg.username);
           return (
-            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isSelf ? 'flex-end' : 'flex-start', marginBottom: '4px' }}>
+            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: isSelf ? 'flex-end' : 'flex-start', maxWidth: '85%', alignSelf: isSelf ? 'flex-end' : 'flex-start', marginBottom: '4px', position: 'relative' }}
+              onContextMenu={(e) => { if (isSelf) { e.preventDefault(); setContextMenu({ idx, x: e.clientX, y: e.clientY }); } }}
+              onClick={() => { if (contextMenu) setContextMenu(null); }}
+            >
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isSelf ? 'row-reverse' : 'row' }}>
                 {!isSelf && !isDM && <div style={{ width: 24, height: 24, borderRadius: 'var(--radius-full)', background: avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '0.6rem', fontWeight: 700, flexShrink: 0, marginBottom: '2px' }}>{initials}</div>}
                 
@@ -380,9 +474,21 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
                      </div>
                   )}
 
-                  {(msg.type !== 'sticker' && msg.type !== 'inspection') && <div style={{ fontSize: '0.85rem', color: isSelf ? 'white' : 'var(--text-primary)', lineHeight: 1.5, wordBreak: 'break-word', paddingBottom: '12px' }}>{msg.text}</div>}
+                  {msg.type === 'voice' && (
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
+                        <Mic size={16} color={isSelf ? 'rgba(255,255,255,0.9)' : 'var(--accent-emerald)'} />
+                        {msg.voice ? (
+                           <audio controls src={msg.voice} style={{ height: '32px', maxWidth: '180px' }} />
+                        ) : (
+                           <span style={{ fontSize: '0.8rem', color: isSelf ? 'white' : 'var(--text-primary)' }}>{msg.text}</span>
+                        )}
+                     </div>
+                  )}
+
+                  {(msg.type !== 'sticker' && msg.type !== 'inspection' && msg.type !== 'voice') && <div style={{ fontSize: '0.85rem', color: isSelf ? 'white' : 'var(--text-primary)', lineHeight: 1.5, wordBreak: 'break-word', paddingBottom: '12px' }}>{msg.text}</div>}
                   
                   <div style={{ position: 'absolute', bottom: '6px', right: '8px', fontSize: '0.55rem', color: isSelf ? 'rgba(255,255,255,0.7)' : 'var(--text-tertiary)', display: 'flex', gap: '2px', alignItems: 'center', fontFamily: "'JetBrains Mono', monospace" }}>
+                    {msg.edited && <span style={{ marginRight: '2px', fontStyle: 'italic' }}>diedit</span>}
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     {isSelf && (msg.is_read ? <CheckCheck size={12} color="rgba(255,255,255,0.9)" /> : <Check size={12} color="rgba(255,255,255,0.6)" />)}
                   </div>
@@ -391,6 +497,23 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
             </div>
           );
         })}
+
+        {/* Context Menu (Edit/Delete) */}
+        {contextMenu && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setContextMenu(null)} />
+            <div style={{ position: 'fixed', left: Math.min(contextMenu.x, window.innerWidth - 160), top: Math.min(contextMenu.y, window.innerHeight - 100), zIndex: 1000, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-elevated)', overflow: 'hidden', minWidth: '140px', animation: 'slideIn 0.15s var(--ease-out)' }}>
+              <button onClick={() => handleEditMessage(contextMenu.idx)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <Pencil size={14} color="var(--accent-blue)" /> Edit
+              </button>
+              <div style={{ height: '1px', background: 'var(--border)' }} />
+              <button onClick={() => handleDeleteMessage(contextMenu.idx)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <Trash2 size={14} color="var(--accent)" /> Hapus
+              </button>
+            </div>
+          </>
+        )}
+
         <div ref={chatEndRef} />
       </div>
 
@@ -411,46 +534,103 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
         </div>
       )}
 
+      {/* Editing Banner */}
+      {editingMsg && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(37, 99, 235, 0.08)', borderTop: '1px solid var(--accent-blue)', borderBottom: '1px solid var(--accent-blue)' }}>
+          <Pencil size={14} color="var(--accent-blue)" />
+          <div style={{ flex: 1, fontSize: '0.75rem', color: 'var(--accent-blue)', fontWeight: 600 }}>Mengedit pesan</div>
+          <button onClick={() => { setEditingMsg(null); setText(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}><X size={16} color="var(--text-tertiary)" /></button>
+        </div>
+      )}
+
       {/* Input */}
-      <form onSubmit={handleSendText} style={{ display: 'flex', padding: '0.6rem', background: 'var(--bg-secondary)', alignItems: 'center', gap: '0.5rem', flexShrink: 0, borderTop: '1px solid var(--border)' }}>
-        <button type="button" onClick={() => setShowQuickReplies(!showQuickReplies)} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: showQuickReplies ? 'var(--accent)' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', width: 36, height: 36, borderRadius: 'var(--radius-full)', transition: 'all 0.2s', padding: 0 }}>
-          <Zap size={18} />
+      <form onSubmit={(e) => { e.preventDefault(); if (editingMsg) { handleSaveEdit(); } else { handleSendText(e); } }} style={{ display: 'flex', padding: '0.5rem', background: 'var(--bg-secondary)', alignItems: 'center', gap: '6px', flexShrink: 0, borderTop: '1px solid var(--border)', position: 'relative' }}>
+        
+        {/* Single + button */}
+        <button type="button" onClick={() => setShowAttachMenu(!showAttachMenu)} style={{ background: showAttachMenu ? 'var(--accent-blue)' : 'var(--bg-tertiary)', border: '1px solid var(--border)', color: showAttachMenu ? 'white' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', width: 36, height: 36, borderRadius: 'var(--radius-full)', transition: 'all 0.2s', padding: 0, transform: showAttachMenu ? 'rotate(45deg)' : 'none', flexShrink: 0 }}>
+          <Plus size={20} />
         </button>
-        <button type="button" onClick={() => fileInputRef.current?.click()} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', width: 36, height: 36, borderRadius: 'var(--radius-full)', transition: 'all 0.2s', padding: 0 }}>
-          <Camera size={18} />
-          <input type="file" accept="image/*" capture="environment" ref={fileInputRef} style={{ display: 'none' }} onChange={(e) => {
-            const file = e.target.files[0]; if (!file) return;
-            const r = new FileReader(); r.onload = (ev) => {
-                const img = new Image(); img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const MAX_W = 800, scale = Math.min(MAX_W / img.width, 1);
-                    canvas.width = img.width * scale; canvas.height = img.height * scale;
-                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-                    const base64 = canvas.toDataURL('image/jpeg', 0.6);
-                    const p = { type: 'image', text: 'Foto Dikirim', image: base64, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
-                    if (socket) socket.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
-                }; img.src = ev.target.result;
-            }; r.readAsDataURL(file);
-            e.target.value = null;
-          }} />
-        </button>
-        <button type="button" onClick={() => fileInspectionRef.current?.click()} style={{ background: 'rgba(5, 150, 105, 0.1)', border: '1px solid rgba(5, 150, 105, 0.4)', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', width: 36, height: 36, borderRadius: 'var(--radius-full)', transition: 'all 0.2s', padding: 0 }} title="Inspeksi Lapangan (Foto + GPS Otomatis)">
-          <Shield size={18} />
-          <input type="file" accept="image/*" capture="environment" ref={fileInspectionRef} style={{ display: 'none' }} onChange={handleInspectionPhoto} />
-        </button>
-        <button type="button" onClick={() => {
-            if (!navigator.geolocation) return;
-            navigator.geolocation.getCurrentPosition(pos => {
-              const p = { type: 'location', text: 'Lokasi Saat Ini', lat: pos.coords.latitude, lng: pos.coords.longitude, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
-              if (socket) socket.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
-            });
-        }} style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', width: 36, height: 36, borderRadius: 'var(--radius-full)', transition: 'all 0.2s', padding: 0 }}>
-          <MapPin size={18} />
-        </button>
-        <input placeholder="Ketik pesan" value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" style={{ flex: 1, background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', padding: '0.6rem 1rem', fontSize: '0.85rem', color: 'var(--text-primary)', outline: 'none' }} />
-        <button type="submit" disabled={!text.trim()} style={{ width: 40, height: 40, borderRadius: 'var(--radius-full)', background: text.trim() ? 'var(--accent)' : 'var(--bg-tertiary)', color: text.trim() ? 'white' : 'var(--text-tertiary)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s var(--ease-spring)' }} onMouseDown={e => e.currentTarget.style.transform='scale(0.92)'} onMouseUp={e => e.currentTarget.style.transform='scale(1)'}>
-          <Send size={18} />
-        </button>
+
+        {/* Popup menu above + */}
+        {showAttachMenu && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 98 }} onClick={() => setShowAttachMenu(false)} />
+            <div style={{ position: 'absolute', bottom: '54px', left: '8px', zIndex: 99, background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-elevated)', overflow: 'hidden', minWidth: '180px', animation: 'slideIn 0.15s var(--ease-out)' }}>
+              <button onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-full)', background: 'rgba(37,99,235,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={16} color="var(--accent-blue)" /></div>
+                Kirim Foto
+              </button>
+              <div style={{ height: '1px', background: 'var(--border)', margin: '0 12px' }} />
+              <button onClick={() => { fileInspectionRef.current?.click(); setShowAttachMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-full)', background: 'rgba(5,150,105,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Shield size={16} color="var(--accent-emerald)" /></div>
+                Inspeksi Lapangan
+              </button>
+              <div style={{ height: '1px', background: 'var(--border)', margin: '0 12px' }} />
+              <button onClick={() => {
+                if (!navigator.geolocation) return;
+                navigator.geolocation.getCurrentPosition(pos => {
+                  const p = { type: 'location', text: 'Lokasi Saat Ini', lat: pos.coords.latitude, lng: pos.coords.longitude, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
+                  if (socket) socket.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
+                });
+                setShowAttachMenu(false);
+              }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-full)', background: 'rgba(217,119,6,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MapPin size={16} color="#d97706" /></div>
+                Kirim Lokasi
+              </button>
+              <div style={{ height: '1px', background: 'var(--border)', margin: '0 12px' }} />
+              <button onClick={() => { setShowQuickReplies(!showQuickReplies); setShowAttachMenu(false); }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 'var(--radius-full)', background: 'rgba(124,58,237,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Zap size={16} color="var(--accent-purple)" /></div>
+                Balasan Cepat
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Hidden file inputs */}
+        <input type="file" accept="image/*" capture="environment" ref={fileInputRef} style={{ display: 'none' }} onChange={(e) => {
+          const file = e.target.files[0]; if (!file) return;
+          const r = new FileReader(); r.onload = (ev) => {
+              const img = new Image(); img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  const MAX_W = 800, scale = Math.min(MAX_W / img.width, 1);
+                  canvas.width = img.width * scale; canvas.height = img.height * scale;
+                  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                  const base64 = canvas.toDataURL('image/jpeg', 0.6);
+                  const p = { type: 'image', text: 'Foto Dikirim', image: base64, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
+                  if (socket) socket.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
+              }; img.src = ev.target.result;
+          }; r.readAsDataURL(file);
+          e.target.value = null;
+        }} />
+        <input type="file" accept="image/*" capture="environment" ref={fileInspectionRef} style={{ display: 'none' }} onChange={handleInspectionPhoto} />
+
+        {/* Text input */}
+        {isVoiceRecording ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(220,38,38,0.05)', borderRadius: 'var(--radius-full)', padding: '0.5rem 1rem', border: '1px solid rgba(220,38,38,0.2)' }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', animation: 'breathe 1s infinite' }} />
+            <span style={{ fontSize: '0.85rem', color: 'var(--accent)', fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{String(Math.floor(voiceSeconds / 60)).padStart(2,'0')}:{String(voiceSeconds % 60).padStart(2,'0')}</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Merekam...</span>
+            <div style={{ flex: 1 }} />
+            <button type="button" onClick={cancelVoiceRecording} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600 }}><X size={16} /></button>
+          </div>
+        ) : (
+          <input placeholder={editingMsg ? 'Edit pesan...' : 'Ketik pesan'} value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" style={{ flex: 1, background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', padding: '0.55rem 1rem', fontSize: '0.85rem', color: 'var(--text-primary)', outline: 'none' }} />
+        )}
+
+        {/* Send or Mic button */}
+        {text.trim() || editingMsg ? (
+          <button type="submit" style={{ width: 38, height: 38, borderRadius: 'var(--radius-full)', background: editingMsg ? 'var(--accent-blue)' : 'var(--accent-emerald)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s var(--ease-spring)' }}>
+            {editingMsg ? <Check size={18} /> : <Send size={17} />}
+          </button>
+        ) : isVoiceRecording ? (
+          <button type="button" onClick={stopVoiceRecording} style={{ width: 38, height: 38, borderRadius: 'var(--radius-full)', background: 'var(--accent)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <Send size={17} />
+          </button>
+        ) : (
+          <button type="button" onClick={startVoiceRecording} style={{ width: 38, height: 38, borderRadius: 'var(--radius-full)', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s var(--ease-spring)' }}>
+            <Mic size={18} />
+          </button>
+        )}
       </form>
     </div>
   );

@@ -144,7 +144,7 @@ app.get('/api/contacts/:phone', async (req, res) => {
 app.get('/api/messages/:room', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT sender_phone, sender_name, msg_type, content, image, lat, lng, is_read, created_at 
+      `SELECT id, sender_phone, sender_name, msg_type, content, image, lat, lng, is_read, edited, created_at 
        FROM messages WHERE room=$1 
        ORDER BY created_at ASC 
        LIMIT 100`,
@@ -228,6 +228,30 @@ app.put('/api/messages/read', async (req, res) => {
       `UPDATE messages SET is_read = true WHERE room = $1 AND sender_phone != $2 AND is_read = false`,
       [room, reader_phone]
     );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Edit a message
+app.put('/api/messages/:id', async (req, res) => {
+  const { content } = req.body;
+  try {
+    await pool.query(
+      `UPDATE messages SET content = $1, edited = true WHERE id = $2`,
+      [content, req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a message
+app.delete('/api/messages/:id', async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM messages WHERE id = $1`, [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
