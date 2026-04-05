@@ -11,7 +11,7 @@ function getAvatarColor(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-export default function ChatScreen({ username, userPhone, initialRoom, initialRoomName, onClearDM, onCall, onVideoCall }) {
+export default function ChatScreen({ username, userPhone, initialRoom, initialRoomName, socket, onClearDM, onCall, onVideoCall }) {
   const [activeRoom, setActiveRoom] = useState(initialRoom || null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -68,32 +68,38 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
             body: JSON.stringify({ room: activeRoom, reader_phone: userPhone })
           }).catch(() => {});
           
-          if (socketRef.current) {
-             socketRef.current.emit('message-read', { room: activeRoom, readerPhone: userPhone });
+          if (socket) {
+             socket.emit('message-read', { room: activeRoom, readerPhone: userPhone });
           }
         }
       })
       .catch(() => { setMessages([]); setLoading(false); });
 
-    const sock = io();
-    socketRef.current = sock;
-    sock.on('connect', () => {
-      sock.emit('register-user', { phone: userPhone });
-      sock.emit('join-channel', { username, channel: activeRoom });
-    });
-    sock.on('chat-message', (data) => {
-      setMessages(prev => [...prev, { ...data, self: false }]);
-      // auto read
-      fetch('/api/messages/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room: activeRoom, reader_phone: userPhone }) }).catch(()=>{});
-      sock.emit('message-read', { room: activeRoom, readerPhone: userPhone });
-    });
-    sock.on('messages-marked-read', (data) => {
-      if (data.room === activeRoom) {
-         setMessages(prev => prev.map(m => (!m.self ? m : { ...m, is_read: true })));
-      }
-    });
-    return () => { sock.disconnect(); socketRef.current = null; };
-  }, [activeRoom, username]);
+    if (socket) {
+      socket.emit('join-channel', { username, channel: activeRoom });
+      
+      const handleChatMessage = (data) => {
+        setMessages(prev => [...prev, { ...data, self: false }]);
+        fetch('/api/messages/read', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room: activeRoom, reader_phone: userPhone }) }).catch(()=>{});
+        socket.emit('message-read', { room: activeRoom, readerPhone: userPhone });
+      };
+      
+      const handleMessagesMarkedRead = (data) => {
+        if (data.room === activeRoom) {
+           setMessages(prev => prev.map(m => (!m.self ? m : { ...m, is_read: true })));
+        }
+      };
+
+      socket.on('chat-message', handleChatMessage);
+      socket.on('messages-marked-read', handleMessagesMarkedRead);
+
+      return () => { 
+        socket.off('chat-message', handleChatMessage);
+        socket.off('messages-marked-read', handleMessagesMarkedRead);
+        socket.emit('join-channel', { username, channel: 'Lobby' }); 
+      };
+    }
+  }, [activeRoom, username, socket]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -116,11 +122,11 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
     }).catch(() => {});
   };
 
-  const handleSendText = (e) => {
-    e.preventDefault();
-    if (!text.trim() || !socketRef.current) return;
-    const packet = { type: 'text', text: text.trim(), self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
-    socketRef.current.emit('chat-message', packet);
+  const handleSendText = (e, msgParams = {}) => {
+    if (e) e.preventDefault();
+    if (!text.trim() && !msgParams.text) return;
+    const packet = { type: 'text', text: msgParams.text || text, self: true, username, timestamp: new Date().toISOString(), room: activeRoom, is_read: false };
+    if (socket) socket.emit('chat-message', packet);
     setMessages(prev => [...prev, packet]);
     saveMessage(packet);
     setText('');
@@ -299,7 +305,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
           {STICKERS.map((stk, i) => (
              <button key={i} onClick={() => {
                 const packet = { type: 'sticker', text: stk, self: true, username, timestamp: new Date().toISOString(), room: activeRoom, is_read: false };
-                socketRef.current?.emit('chat-message', packet);
+                if (socket) socket.emit('chat-message', packet);
                 setMessages(prev => [...prev, packet]);
                 saveMessage(packet);
                 setShowStickers(false);
@@ -327,7 +333,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
                     canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
                     const base64 = canvas.toDataURL('image/jpeg', 0.6);
                     const p = { type: 'image', text: '📷 Foto', image: base64, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
-                    socketRef.current?.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
+                    if (socket) socket.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
                 }; img.src = ev.target.result;
             }; r.readAsDataURL(file);
           }} />
@@ -336,7 +342,7 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
             if (!navigator.geolocation) return;
             navigator.geolocation.getCurrentPosition(pos => {
               const p = { type: 'location', text: '📍 Lokasi', lat: pos.coords.latitude, lng: pos.coords.longitude, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
-              socketRef.current?.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
+              if (socket) socket.emit('chat-message', p); setMessages(prev => [...prev, p]); saveMessage(p);
             });
         }} style={{ background: 'none', border: 'none', color: '#54656f', display: 'flex', alignItems: 'center', cursor: 'pointer' }}><MapPin size={24} /></button>
         <input placeholder="Ketik pesan" value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" style={{ flex: 1, background: 'white', border: 'none', borderRadius: '24px', padding: '9px 16px', fontSize: '0.9rem', color: '#111', outline: 'none', boxShadow: '0 1px 1px rgba(0,0,0,0.1)' }} />

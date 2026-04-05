@@ -453,12 +453,12 @@ export default function App() {
 
   const leaveChannel = () => {
     if (channel.startsWith('MEETING-')) setNavState('conference');
+    else if (channel.startsWith('CALL-') || channel.startsWith('VC-')) setNavState('chat');
     else setNavState('channel');
     
     setChannel('');
     if (socket) {
-      socket.disconnect();
-      setSocket(null);
+       socket.emit('join-channel', { username, channel: 'Lobby' }); // Emits to leave previous rooms
     }
     if (globalVideoStream) {
       globalVideoStream.getTracks().forEach(t => t.stop());
@@ -658,6 +658,7 @@ export default function App() {
           userPhone={userPhone} 
           initialRoom={dmRoom} 
           initialRoomName={dmName} 
+          socket={socket}
           onClearDM={() => { setDmRoom(null); setDmName(''); }} 
           onCall={(targetPhone, name) => {
             const roomCode = `CALL-${[userPhone, targetPhone].sort().join('-')}`; 
