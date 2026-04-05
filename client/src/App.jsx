@@ -464,23 +464,34 @@ export default function App() {
 
       {navState === 'login' && (
         <div className="auth-container">
-          <h1 style={{color: 'var(--accent)', fontSize: '2.2rem', marginBottom: '4px'}}>Si Talki HKA</h1>
-          <div className="auth-subtitle" style={{fontWeight: 'bold', letterSpacing: '0.5px'}}>Komunikasi Cerdas Seluruh Insan HKA</div>
-          <br/>
+          {/* Animated Radio Icon */}
+          <div style={{ width: 72, height: 72, borderRadius: '20px', background: 'linear-gradient(135deg, var(--accent) 0%, #b71c1c 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', boxShadow: '0 8px 30px rgba(229,57,53,0.3)', position: 'relative' }}>
+            <Radio size={32} color="white" />
+            <div style={{ position: 'absolute', inset: '-4px', borderRadius: '24px', border: '2px solid rgba(229,57,53,0.2)', animation: 'pulseBg 2s infinite' }} />
+          </div>
+
+          <h1 style={{ color: 'var(--text-main)', fontSize: '1.8rem', marginBottom: '2px', fontWeight: 900, letterSpacing: '-0.5px' }}>Si Talki <span style={{color:'var(--accent)'}}>HKA</span></h1>
+          <div className="auth-subtitle" style={{ fontWeight: 500, letterSpacing: '0.5px', fontSize: '0.75rem', marginBottom: '1.5rem' }}>Komunikasi Cerdas Seluruh Insan HKA</div>
 
           {/* Tab toggle */}
-          <div style={{ display: 'flex', width: '100%', marginBottom: '1rem', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
-            <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); }} style={{ flex: 1, padding: '0.6rem', border: 'none', background: authMode === 'login' ? 'var(--accent)' : 'var(--bg-tertiary)', color: authMode === 'login' ? 'white' : 'var(--text-main)', fontWeight: 600, cursor: 'pointer' }}>Masuk</button>
-            <button type="button" onClick={() => { setAuthMode('register'); setAuthError(''); }} style={{ flex: 1, padding: '0.6rem', border: 'none', background: authMode === 'register' ? 'var(--accent)' : 'var(--bg-tertiary)', color: authMode === 'register' ? 'white' : 'var(--text-main)', fontWeight: 600, cursor: 'pointer' }}>Daftar Baru</button>
+          <div style={{ display: 'flex', width: '100%', marginBottom: '1rem', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border-light)', background: 'var(--bg-tertiary)' }}>
+            <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); }} style={{ flex: 1, padding: '0.6rem', border: 'none', background: authMode === 'login' ? 'var(--accent)' : 'transparent', color: authMode === 'login' ? 'white' : 'var(--text-muted)', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'inherit', transition: 'all 0.2s', borderRadius: authMode === 'login' ? '8px' : '0' }}>Masuk</button>
+            <button type="button" onClick={() => { setAuthMode('register'); setAuthError(''); }} style={{ flex: 1, padding: '0.6rem', border: 'none', background: authMode === 'register' ? 'var(--accent)' : 'transparent', color: authMode === 'register' ? 'white' : 'var(--text-muted)', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'inherit', transition: 'all 0.2s', borderRadius: authMode === 'register' ? '8px' : '0' }}>Daftar Baru</button>
           </div>
 
           <form style={{ width: '100%' }} onSubmit={handleAuth}>
-            <input className="form-input" placeholder="Nomor HP (08xxx)" value={authPhone} onChange={(e) => setAuthPhone(e.target.value)} autoFocus />
+            <div style={{ position: 'relative', marginBottom: '0.6rem' }}>
+              <input className="form-input" style={{marginBottom: 0, paddingLeft: '2.5rem'}} placeholder="Nomor HP (08xxx)" value={authPhone} onChange={(e) => setAuthPhone(e.target.value)} autoFocus />
+              <span style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1rem' }}>📱</span>
+            </div>
             {authMode === 'register' && (
               <>
-                <input className="form-input" placeholder="Nama Lengkap" value={authName} onChange={(e) => setAuthName(e.target.value)} />
-                <select className="form-input" value={authDept} onChange={(e) => setAuthDept(e.target.value)} style={{color: authDept ? '#fff' : '#888'}}>
-                  <option value="">Pilih Departemen / Unit...</option>
+                <div style={{ position: 'relative', marginBottom: '0.6rem' }}>
+                  <input className="form-input" style={{marginBottom: 0, paddingLeft: '2.5rem'}} placeholder="Nama Lengkap" value={authName} onChange={(e) => setAuthName(e.target.value)} />
+                  <span style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1rem' }}>👤</span>
+                </div>
+                <select className="form-input" value={authDept} onChange={(e) => setAuthDept(e.target.value)} style={{color: authDept ? 'var(--text-main)' : 'var(--text-dim)'}}>
+                  <option value="">📁 Pilih Departemen / Unit...</option>
                   <optgroup label="Kantor Pusat">
                     <option>Departemen HC, Pengembangan dan IT</option>
                     <option>Departemen Keuangan, Akuntansi, dan Risiko</option>
@@ -525,11 +536,16 @@ export default function App() {
                 </select>
               </>
             )}
-            {authError && <div style={{ color: '#c62828', fontSize: '0.85rem', marginBottom: '0.8rem', textAlign: 'center' }}>{authError}</div>}
-            <button type="submit" className="btn-primary" disabled={authLoading || !authPhone.trim() || (authMode === 'register' && !authName.trim())}>
-              {authLoading ? 'Memproses...' : (authMode === 'register' ? 'Daftar & Masuk' : 'Masuk')}
+            {authError && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginBottom: '0.6rem', textAlign: 'center', background: 'rgba(239,68,68,0.1)', padding: '0.5rem', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.2)' }}>{authError}</div>}
+            <button type="submit" className="btn-primary" disabled={authLoading || !authPhone.trim() || (authMode === 'register' && !authName.trim())} style={{ marginTop: '0.3rem' }}>
+              {authLoading ? 'Memproses...' : (authMode === 'register' ? '🚀 Daftar & Masuk' : '🔐 Masuk')}
             </button>
           </form>
+
+          <div style={{ marginTop: '1.5rem', fontSize: '0.65rem', color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.5 }}>
+            PT Hutama Karya Infrastruktur<br/>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Enterprise Communication Platform v8.7</span>
+          </div>
         </div>
       )}
 
