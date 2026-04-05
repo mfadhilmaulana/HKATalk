@@ -60,6 +60,74 @@ export function playZelloBeep(type) {
   }
 }
 
+let ringInterval = null;
+
+export function playRingtone() {
+  const ctx = initAudioContext();
+  if (ringInterval) return;
+  
+  const beep = () => {
+     const t = ctx.currentTime;
+     const osc1 = ctx.createOscillator();
+     const osc2 = ctx.createOscillator();
+     const gain = ctx.createGain();
+     
+     osc1.type = 'sine';
+     osc2.type = 'sine';
+     osc1.frequency.setValueAtTime(440, t); // Standard European/UK ring tone freq 1
+     osc2.frequency.setValueAtTime(480, t); // Standard freq 2
+     
+     gain.gain.setValueAtTime(0, t);
+     gain.gain.linearRampToValueAtTime(0.1, t + 0.05);
+     gain.gain.setValueAtTime(0.1, t + 0.4);
+     gain.gain.linearRampToValueAtTime(0, t + 0.45);
+     
+     osc1.connect(gain);
+     osc2.connect(gain);
+     gain.connect(ctx.destination);
+     
+     osc1.start(t);
+     osc2.start(t);
+     osc1.stop(t + 0.5);
+     osc2.stop(t + 0.5);
+     
+     // Double ring pattern: ring, pause, ring
+     const t2 = t + 0.6;
+     const osc3 = ctx.createOscillator();
+     const osc4 = ctx.createOscillator();
+     const gain2 = ctx.createGain();
+     
+     osc3.type = 'sine';
+     osc4.type = 'sine';
+     osc3.frequency.setValueAtTime(440, t2);
+     osc4.frequency.setValueAtTime(480, t2);
+     
+     gain2.gain.setValueAtTime(0, t2);
+     gain2.gain.linearRampToValueAtTime(0.1, t2 + 0.05);
+     gain2.gain.setValueAtTime(0.1, t2 + 0.4);
+     gain2.gain.linearRampToValueAtTime(0, t2 + 0.45);
+     
+     osc3.connect(gain2);
+     osc4.connect(gain2);
+     gain2.connect(ctx.destination);
+     
+     osc3.start(t2);
+     osc4.start(t2);
+     osc3.stop(t2 + 0.5);
+     osc4.stop(t2 + 0.5);
+  };
+  
+  beep();
+  ringInterval = setInterval(beep, 3000); // repeat every 3 seconds
+}
+
+export function stopRingtone() {
+  if (ringInterval) {
+    clearInterval(ringInterval);
+    ringInterval = null;
+  }
+}
+
 export function playSiren() {
   const ctx = initAudioContext();
   const t = ctx.currentTime;

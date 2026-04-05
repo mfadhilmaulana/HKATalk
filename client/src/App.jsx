@@ -10,7 +10,7 @@ import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
 import CallScreen from './components/CallScreen';
-import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, AUDIO_SAMPLE_RATE } from './audioEngine';
+import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, playRingtone, stopRingtone, AUDIO_SAMPLE_RATE } from './audioEngine';
 
 let mediaStreamSource = null;
 let scriptNode = null;
@@ -118,11 +118,10 @@ export default function App() {
         });
         n.onclick = () => window.focus();
       }
-      playSiren(); // Temporary usage to ring
+      playRingtone();
     });
 
     newSocket.on('call-accepted', (data) => {
-      // Logic to actually start WebRTC or move to Meeting
       setActiveCall(prev => ({ ...prev, accepted: true }));
     });
 
@@ -134,6 +133,7 @@ export default function App() {
     newSocket.on('call-hungup', () => {
       setActiveCall(null);
       setIncomingCall(null);
+      stopRingtone();
     });
 
     newSocket.on('incoming-message-notif', (data) => {
@@ -484,6 +484,7 @@ export default function App() {
                 onClick={() => {
                   socket?.emit('reject-call', { targetPhone: incomingCall.from });
                   setIncomingCall(null);
+                  stopRingtone();
                 }}
                 style={{ width: 64, height: 64, borderRadius: '50%', background: '#ff3b30', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
               >
@@ -495,6 +496,7 @@ export default function App() {
                   const roomCode = `CALL-${[userPhone, incomingCall.from].sort().join('-')}`;
                   setActiveCall({ targetPhone: incomingCall.from, type: incomingCall.type, isCaller: false, accepted: true, callerName: incomingCall.callerName, roomCode });
                   setIncomingCall(null);
+                  stopRingtone();
                   joinChannel(roomCode); // Join the socket room for signaling, but don't redirect navState if we handle it cleanly
                 }}
                 style={{ width: 64, height: 64, borderRadius: '50%', background: '#25d366', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
@@ -651,7 +653,25 @@ export default function App() {
       )}
 
       {navState === 'chat' && (
-        <ChatScreen username={username} userPhone={userPhone} initialRoom={dmRoom} initialRoomName={dmName} onClearDM={() => { setDmRoom(null); setDmName(''); }} />
+        <ChatScreen 
+          username={username} 
+          userPhone={userPhone} 
+          initialRoom={dmRoom} 
+          initialRoomName={dmName} 
+          onClearDM={() => { setDmRoom(null); setDmName(''); }} 
+          onCall={(targetPhone, name) => {
+            const roomCode = `CALL-${[userPhone, targetPhone].sort().join('-')}`; 
+            socket?.emit('call-user', { targetPhone, type: 'voice', callerName: username });
+            setActiveCall({ targetPhone, type: 'voice', isCaller: true, accepted: false, callerName: name || 'Panggilan', roomCode });
+            joinChannel(roomCode); 
+          }}
+          onVideoCall={(targetPhone, name) => {
+            const roomCode = `VC-${[userPhone, targetPhone].sort().join('-')}`; 
+            socket?.emit('call-user', { targetPhone, type: 'video', callerName: username });
+            setActiveCall({ targetPhone, type: 'video', isCaller: true, accepted: false, callerName: name || 'Panggilan', roomCode });
+            joinChannel(roomCode); 
+          }}
+        />
       )}
       
       {navState !== 'login' && (
