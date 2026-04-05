@@ -36,7 +36,8 @@ export default function TalkScreen({
         {/* Incoming PTT Video Feed */}
         {activeSpeaker && activeFrame ? (
           <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
-             <img src={activeFrame} alt="Incoming video frame" style={{ width: '100%', maxWidth: '300px', borderRadius: '16px', border: '2px solid var(--accent)', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }} />
+             <img src={activeFrame} alt="Incoming video frame" style={{ width: '100%', maxWidth: '320px', borderRadius: '16px', border: '2px solid var(--accent)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', imageRendering: 'auto', objectFit: 'cover' }} />
+             <div style={{ marginTop: '8px', fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>📹 {activeSpeaker}</div>
           </div>
         ) : (
           <div style={{ opacity: 0.3, textAlign: 'center' }}>

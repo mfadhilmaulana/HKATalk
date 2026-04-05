@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, MapPin, Send, ChevronLeft, ArrowRight, Shield, Plus, MessageSquare, Users, Search, Phone, Video, X, Smile } from 'lucide-react';
+import { Camera, MapPin, Send, ChevronLeft, ArrowRight, Shield, Plus, MessageSquare, Users, Search, Phone, Video, X, Smile, Mic } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 const STICKERS = ['👍', '❤️', '😂', '🔥', '🙏', '🎉', '😢', '😍', '☕', '🚀', '💯', '🤔'];

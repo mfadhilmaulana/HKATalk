@@ -30,7 +30,7 @@ export function startStaticNoise() {
   filter.frequency.value = 3000;
   
   const gain = ctx.createGain();
-  gain.gain.value = 0.025; 
+  gain.gain.value = 0.0125; 
 
   staticNoiseNode.connect(filter);
   filter.connect(gain);

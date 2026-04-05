@@ -24,11 +24,13 @@ let radioPlayer = typeof Audio !== 'undefined' ? new Audio() : null;
 const captureVideoFrame = (videoElement, socket, username, channel) => {
   if (!videoElement || videoElement.readyState !== videoElement.HAVE_ENOUGH_DATA) return;
   const canvas = document.createElement('canvas');
-  canvas.width = 160; 
-  canvas.height = 120; // super low res to avoid crashing server
+  canvas.width = 320; 
+  canvas.height = 240;
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-  const frame = canvas.toDataURL('image/jpeg', 0.4);
+  const frame = canvas.toDataURL('image/jpeg', 0.6);
   if (socket) socket.emit('video-frame', { frame });
 };
 
@@ -201,7 +203,7 @@ export default function App() {
       setIsVideoEnabled(false);
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 320, height: 240 } });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
         globalVideoStream = stream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
