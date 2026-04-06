@@ -145,23 +145,25 @@ export default function App() {
 
       if (data.type === 'start') {
         setActiveSpeaker(payload.username);
-        setActiveFrame(null); // Clear old frame
+        setActiveFrame(null);
         if (!isRecordingRef.current) {
           playZelloBeep('start');
-          startStaticNoise();
-          playTime = initAudioContext().currentTime + 0.1; 
+          // DO NOT play static noise - it gets picked up by mic causing feedback
+          playTime = initAudioContext().currentTime + 0.05;
         }
       } 
       else if (data.type === 'end') {
         setActiveSpeaker(null);
         setActiveFrame(null);
         if (!isRecordingRef.current) {
-          stopStaticNoise();
+          // No static noise to stop
           playZelloBeep('end');
         }
       } 
       if (data.type === 'chunk' && data.buffer) {
         if (isRecordingRef.current) return;
+        // Self-echo guard: don't play back our own transmitted audio
+        if (payload.username === username) return;
         // Guard: ensure receiverChain is initialized
         if (!receiverChain) {
           receiverChain = createReceiverChain();
@@ -174,13 +176,13 @@ export default function App() {
         }
         
         const ctx = initAudioContext();
-        // If playTime has drifted behind current time, resync
+        // Resync if playTime drifted behind
         if (playTime < ctx.currentTime) {
-          playTime = ctx.currentTime + 0.05;
+          playTime = ctx.currentTime + 0.02;
         }
-        // If playTime is too far ahead (>1.5s), flush to prevent double-buffering
-        if (playTime > ctx.currentTime + 1.5) {
-           playTime = ctx.currentTime + 0.05;
+        // Flush if too far ahead (>1s) to prevent double-buffering
+        if (playTime > ctx.currentTime + 1.0) {
+          playTime = ctx.currentTime + 0.02;
         }
         
         const audioBuffer = ctx.createBuffer(1, float32Array.length, AUDIO_SAMPLE_RATE);
@@ -188,19 +190,8 @@ export default function App() {
         
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
-        
-        // Anti-pop Envelope (NetEQ Jitter Concealment)
-        const chunkGain = ctx.createGain();
-        chunkGain.gain.setValueAtTime(0, playTime);
-        chunkGain.gain.linearRampToValueAtTime(1, playTime + 0.005);
-        const duration = audioBuffer.duration;
-        chunkGain.gain.setValueAtTime(1, Math.max(playTime, playTime + duration - 0.005));
-        chunkGain.gain.linearRampToValueAtTime(0, playTime + duration);
-        
-        source.connect(chunkGain);
-        if (!receiverChain) receiverChain = createReceiverChain();
-        chunkGain.connect(receiverChain.input);
-        
+        // Direct connection — no per-chunk gain envelope (was causing reverb artifacts)
+        source.connect(receiverChain.input);
         source.start(playTime);
         playTime += audioBuffer.duration;
       }
@@ -282,7 +273,7 @@ export default function App() {
       }
       
       mediaStreamSource = ctx.createMediaStreamSource(globalStream);
-      scriptNode = ctx.createScriptProcessor(4096, 1, 1);
+      scriptNode = ctx.createScriptProcessor(1024, 1, 1); // 1024 = ~64ms latency at 16kHz (was 4096 = 256ms)
       
       scriptNode.onaudioprocess = (e) => {
         if (!isRecordingRef.current) return;
@@ -294,7 +285,8 @@ export default function App() {
         }
         rms = Math.sqrt(rms / float32Array.length);
         
-        if (rms < 0.01) {
+        // Lower threshold: 0.003 so soft voices aren't gated out (was 0.01 which cut syllable edges)
+        if (rms < 0.003) {
           return; 
         }
 

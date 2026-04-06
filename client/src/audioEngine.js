@@ -203,34 +203,34 @@ export function playSiren() {
 export function createReceiverChain() {
   const ctx = initAudioContext();
   
+  // High-pass at 120Hz to cut rumble/noise floor
   const highpass = ctx.createBiquadFilter();
   highpass.type = 'highpass';
-  highpass.frequency.value = 250; 
+  highpass.frequency.value = 120;
+  highpass.Q.value = 0.7;
   
-  const highshelf = ctx.createBiquadFilter();
-  highshelf.type = 'highshelf';
-  highshelf.frequency.value = 2500;
-  highshelf.gain.value = 5; 
+  // Low-pass at 8000Hz to cut harsh high-frequency artifacts
+  const lowpass = ctx.createBiquadFilter();
+  lowpass.type = 'lowpass';
+  lowpass.frequency.value = 8000;
+  lowpass.Q.value = 0.7;
 
+  // Gentle soft-knee limiter — NOT a brickwall compressor (ratio 20:1 caused pumping/reverb)
   const compressor = ctx.createDynamicsCompressor();
-  // Enterprise Walkie-Talkie Brickwall Limiter to stop feedback
-  compressor.threshold.value = -12;
-  compressor.knee.value = 0;
-  compressor.ratio.value = 20;
-  compressor.attack.value = 0.001;
-  compressor.release.value = 0.1;
+  compressor.threshold.value = -6;   // Only limit peaks
+  compressor.knee.value = 6;          // Soft knee = no abrupt gain changes  
+  compressor.ratio.value = 4;         // 4:1 gentle — doesn't pump
+  compressor.attack.value = 0.003;    // 3ms attack — fast enough to catch peaks
+  compressor.release.value = 0.25;    // 250ms release — smooth, not reverby
 
-  // Audio Visualizer Analyser for incoming audio
+  // Audio Visualizer Analyser
   receiverAnalyser = ctx.createAnalyser();
   receiverAnalyser.fftSize = 64;
-  receiverAnalyser.smoothingTimeConstant = 0.75;
+  receiverAnalyser.smoothingTimeConstant = 0.4; // Less smoothing = more responsive, less reverb feel
 
-  highpass.connect(highshelf);
-  highshelf.connect(compressor);
+  highpass.connect(lowpass);
+  lowpass.connect(compressor);
   compressor.connect(receiverAnalyser);
-  
-  // CRITICAL: Connect to masterGainNode, not destination.
-  // This allows the entire incoming voice channel to be forcefully muted when PTT is pressed.
   receiverAnalyser.connect(masterGainNode);
   
   return { input: highpass };
