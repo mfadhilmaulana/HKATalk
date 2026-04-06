@@ -111,7 +111,9 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
       .then(data => {
         const history = (data.messages || []).map(m => ({
           type: m.msg_type,
-          text: m.content,
+          // For voice: content holds the base64 audio; for others: content is the text
+          text: m.msg_type === 'voice' ? m.content : m.content,
+          voice: m.msg_type === 'voice' ? m.content : undefined,
           image: m.image || '',
           lat: m.lat,
           lng: m.lng,
@@ -170,6 +172,11 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
   }, [messages]);
 
   const saveMessage = (msg) => {
+    // Determine image field: both 'image' and 'inspection' types carry image data
+    const imageData = (msg.type === 'image' || msg.type === 'inspection') ? (msg.image || '') : '';
+    // Voice data stored in content field since it's base64 audio
+    const contentData = msg.type === 'voice' ? (msg.voice || msg.text || '') : (msg.text || '');
+
     fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -178,12 +185,12 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
         sender_phone: userPhone || '',
         sender_name: username,
         msg_type: msg.type,
-        content: msg.text || '',
-        image: msg.type === 'image' ? msg.image : '',
+        content: contentData,
+        image: imageData,
         lat: msg.lat || 0,
         lng: msg.lng || 0,
       })
-    }).catch(() => {});
+    }).catch((err) => console.warn('[saveMessage] failed:', err.message));
   };
 
   const handleSendText = (e, msgParams = {}) => {
@@ -233,29 +240,56 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
   const startVoiceRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      
+      // Pick the best supported MIME type
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/ogg';
+
+      const recorder = new MediaRecorder(stream, { mimeType });
       voiceChunksRef.current = [];
-      recorder.ondataavailable = (e) => voiceChunksRef.current.push(e.data);
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) voiceChunksRef.current.push(e.data); };
       recorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(voiceChunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(voiceChunksRef.current, { type: mimeType });
         const reader = new FileReader();
         reader.onload = () => {
           const base64 = reader.result;
-          const duration = voiceSeconds;
-          const packet = { type: 'voice', text: `🎤 Pesan Suara (${duration}d)`, voice: base64, self: true, username, timestamp: new Date().toISOString(), room: activeRoom, is_read: false };
-          if (socket) socket.emit('chat-message', packet);
+          const secs = voiceTimerRef._seconds || 0;
+          const durLabel = `${String(Math.floor(secs/60)).padStart(2,'0')}:${String(secs%60).padStart(2,'0')}`;
+          const packet = { 
+            type: 'voice', 
+            text: `🎤 Pesan Suara (${durLabel})`, 
+            voice: base64, 
+            self: true, 
+            username, 
+            timestamp: new Date().toISOString(), 
+            room: activeRoom, 
+            is_read: false 
+          };
+          try {
+            if (socket) socket.emit('chat-message', packet);
+          } catch(err) { console.warn('[voice emit]', err.message); }
           setMessages(prev => [...prev, packet]);
           saveMessage({ ...packet, type: 'voice' });
         };
         reader.readAsDataURL(blob);
       };
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      recorder.start(100); // collect data every 100ms for reliability
       setIsVoiceRecording(true);
       setVoiceSeconds(0);
-      voiceTimerRef.current = setInterval(() => setVoiceSeconds(s => s + 1), 1000);
-    } catch {}
+      voiceTimerRef._seconds = 0;
+      voiceTimerRef.current = setInterval(() => {
+        voiceTimerRef._seconds = (voiceTimerRef._seconds || 0) + 1;
+        setVoiceSeconds(s => s + 1);
+      }, 1000);
+    } catch(err) {
+      console.warn('[startVoiceRecording]', err.message);
+      alert('Tidak dapat mengakses mikrofon: ' + err.message);
+    }
   };
 
   const stopVoiceRecording = () => {
