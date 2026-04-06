@@ -50,8 +50,16 @@ export function stopStaticNoise() {
 
 export function setSpeakerMute(isMuted) {
   if (masterGainNode && audioContext) {
-    // 0 = Hardcore Instant Mute anti-feedback, 1 = normal volume
-    masterGainNode.gain.setValueAtTime(isMuted ? 0 : 1.0, audioContext.currentTime);
+    if (isMuted) {
+      // Hard cut to zero instantly — no ramp, eliminates any bleed-through
+      masterGainNode.gain.cancelScheduledValues(audioContext.currentTime);
+      masterGainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    } else {
+      // Short 15ms ramp up to avoid click/pop on unmute
+      masterGainNode.gain.cancelScheduledValues(audioContext.currentTime);
+      masterGainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      masterGainNode.gain.linearRampToValueAtTime(1.0, audioContext.currentTime + 0.015);
+    }
   }
 }
 

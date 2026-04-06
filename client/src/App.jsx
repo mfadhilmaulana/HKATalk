@@ -160,8 +160,12 @@ export default function App() {
           playZelloBeep('end');
         }
       } 
-      else if (data.type === 'chunk' && data.buffer) {
+      if (data.type === 'chunk' && data.buffer) {
         if (isRecordingRef.current) return;
+        // Guard: ensure receiverChain is initialized
+        if (!receiverChain) {
+          receiverChain = createReceiverChain();
+        }
 
         const int16Array = new Int16Array(data.buffer);
         const float32Array = new Float32Array(int16Array.length);
@@ -170,12 +174,13 @@ export default function App() {
         }
         
         const ctx = initAudioContext();
+        // If playTime has drifted behind current time, resync
         if (playTime < ctx.currentTime) {
-          playTime = ctx.currentTime;
+          playTime = ctx.currentTime + 0.05;
         }
-        
-        if (playTime > ctx.currentTime + 1.0) {
-           playTime = ctx.currentTime + 0.1;
+        // If playTime is too far ahead (>1.5s), flush to prevent double-buffering
+        if (playTime > ctx.currentTime + 1.5) {
+           playTime = ctx.currentTime + 0.05;
         }
         
         const audioBuffer = ctx.createBuffer(1, float32Array.length, AUDIO_SAMPLE_RATE);
@@ -193,6 +198,7 @@ export default function App() {
         chunkGain.gain.linearRampToValueAtTime(0, playTime + duration);
         
         source.connect(chunkGain);
+        if (!receiverChain) receiverChain = createReceiverChain();
         chunkGain.connect(receiverChain.input);
         
         source.start(playTime);
@@ -242,7 +248,10 @@ export default function App() {
       stopRadio();
     }
     
-    setSpeakerMute(true); 
+    // Immediately mute speaker to prevent any feedback
+    setSpeakerMute(true);
+    // Flush the audio queue so no stale chunks play through the mute window
+    playTime = initAudioContext().currentTime + 999;
 
     const ctx = initAudioContext();
     if (ctx.state === 'suspended') await ctx.resume();
@@ -343,7 +352,10 @@ export default function App() {
 
     clearMicAnalyser();
 
-    setTimeout(() => { setSpeakerMute(false); }, 300);
+    // Reset playTime so incoming audio resumes cleanly after PTT
+    playTime = 0;
+    // Unmute with a generous holdoff so receiver chain is fully flushed
+    setTimeout(() => { setSpeakerMute(false); }, 500);
   };
 
   const stopRadio = () => {
