@@ -47,42 +47,45 @@ export default function ChatScreen({ username, userPhone, initialRoom, initialRo
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const base64 = canvas.toDataURL('image/jpeg', 0.95);
-            
+            const base64 = canvas.toDataURL('image/jpeg', 0.9); // Slightly better compression
+
             if (!navigator.geolocation) {
-                setShowGpsPopup(true);
+                alert('GPS tidak didukung di perangkat ini.');
                 return;
             }
+            
+            setShowGpsPopup(true); // Show "Fetching GPS" UI
             
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const lat = pos.coords.latitude;
                 const lng = pos.coords.longitude;
                 let locationName = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
                 
-                setLoading(true);
                 try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                    // Timeout-safe geocoding (3 seconds max)
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, { signal: controller.signal });
+                    clearTimeout(timeoutId);
                     const data = await res.json();
                     if (data.display_name) {
-                       // Ambil ringkasan alamat (hilangkan detail kelurahan jika terlalu panjang, atau ambil semua)
                        const parts = data.display_name.split(',');
                        locationName = parts.slice(0, 3).join(',').trim(); 
                     }
                 } catch(error) {
-                    console.log('Geocoding failed');
+                    console.log('Geocoding slow or failed, using coordinates');
                 }
-                setLoading(false);
                 
                 const summary = `📍 Inspeksi Lapangan\nLokasi: ${locationName}`;
-                
                 const p = { type: 'inspection', text: summary, image: base64, lat: lat, lng: lng, self: true, username, timestamp: new Date().toISOString(), room: activeRoom };
                 if (socket) socket.emit('chat-message', p); 
                 setMessages(prev => [...prev, p]); 
                 saveMessage(p);
                 setShowGpsPopup(false);
-            }, () => {
-                alert('Gagal mendapatkan GPS. Pastikan Izin Lokasi diaktifkan.');
-            });
+            }, (err) => {
+                setShowGpsPopup(false);
+                alert(`Gagal mendapatkan GPS: ${err.message}. Pastikan izin lokasi aktif.`);
+            }, { timeout: 10000, enableHighAccuracy: true });
         }; 
         img.src = ev.target.result;
     }; 
