@@ -9,7 +9,7 @@ import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
-import { initAudioContext, playZelloBeep, createReceiverChain, createMicCapture, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, clearMicAnalyser } from './audioEngine';
+import { initAudioContext, playZelloBeep, createReceiverChain, createMicCapture, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, clearMicAnalyser, resampleAudio, primeAudioSession } from './audioEngine';
 
 let micCapture = null;   // { processor, source, silent } from createMicCapture
 let globalStream = null;
@@ -166,18 +166,23 @@ export default function App() {
         if (!receiverChain) receiverChain = createReceiverChain();
 
         const int16 = new Int16Array(data.buffer);
-        const f32   = new Float32Array(int16.length);
+        let f32 = new Float32Array(int16.length);
         for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32767;
 
         const ctx = initAudioContext();
-        // Use the SENDER's actual sample rate — this is the key fix for alien voice
         const senderRate = data.sampleRate || ctx.sampleRate;
 
-        // Resync jitter buffer
-        if (playTime < ctx.currentTime)          playTime = ctx.currentTime + 0.02;
-        if (playTime > ctx.currentTime + 1.0)    playTime = ctx.currentTime + 0.02;
+        // NEW: Manual Resample to match local hardware rate (Fixes Safari crackle/pitch)
+        if (senderRate !== ctx.sampleRate) {
+          f32 = resampleAudio(f32, senderRate, ctx.sampleRate);
+        }
 
-        const buf = ctx.createBuffer(1, f32.length, senderRate);
+        // Resync jitter buffer
+        if (playTime < ctx.currentTime)          playTime = ctx.currentTime + 0.04; // 40ms offset for Safari stability
+        if (playTime > ctx.currentTime + 1.0)    playTime = ctx.currentTime + 0.04;
+
+        // Always create at LOCAL rate after resampling
+        const buf = ctx.createBuffer(1, f32.length, ctx.sampleRate);
         buf.getChannelData(0).set(f32);
 
         const src = ctx.createBufferSource();
@@ -232,6 +237,7 @@ export default function App() {
     playTime = initAudioContext().currentTime + 999;
 
     const ctx = initAudioContext();
+    primeAudioSession(); // Keep session warm for iOS
     if (ctx.state === 'suspended') await ctx.resume();
 
     setIsRecording(true);

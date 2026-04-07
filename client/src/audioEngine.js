@@ -22,14 +22,60 @@ let audioContext  = null;
 let masterGain    = null;
 let receiverAnalyser = null;
 let micAnalyser   = null;
+let silentAudio   = null; // For iOS priming
+
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+/**
+ * Manual Linear Resampler
+ * Bypasses buggy Safari internal resampler for real-time 48k -> 44.1k (or vice-versa)
+ */
+export function resampleAudio(float32Array, fromRate, toRate) {
+  if (fromRate === toRate) return float32Array;
+  const ratio = fromRate / toRate;
+  const newLength = Math.round(float32Array.length / ratio);
+  const result = new Float32Array(newLength);
+  for (let i = 0; i < newLength; i++) {
+    const pos = i * ratio;
+    const index = Math.floor(pos);
+    const weight = pos - index;
+    if (index + 1 < float32Array.length) {
+      result[i] = float32Array[index] * (1 - weight) + float32Array[index + 1] * weight;
+    } else {
+      result[i] = float32Array[index];
+    }
+  }
+  return result;
+}
+
+/**
+ * iOS Audio Session Primer
+ * Plays a silent looping sound to keep the audio session 'warm' and on the main speaker.
+ * MUST be called inside a user gesture (mousedown/touchstart).
+ */
+export function primeAudioSession() {
+  if (!isIOS) return;
+  if (!silentAudio) {
+    // 1-second silent WAV base64
+    const silentWav = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+    silentAudio = new Audio(silentWav);
+    silentAudio.loop = true;
+  }
+  silentAudio.play().catch(() => {
+    // Standard Safari block if no gesture yet
+  });
+}
 
 // ── AudioContext ──────────────────────────────────────────────────────────────
 
 export function initAudioContext() {
   if (!audioContext) {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)({
-      latencyHint: 'interactive', // lowest possible latency
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    audioContext = new AudioContextClass({
+      latencyHint: 'interactive',
     });
+    
+    // Some iOS versions need to see activity to fully unlock
     masterGain = audioContext.createGain();
     masterGain.gain.value = 1.0;
     masterGain.connect(audioContext.destination);
