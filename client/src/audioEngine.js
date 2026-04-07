@@ -82,27 +82,33 @@ export function initAudioContext() {
     // --- ULTIMATE iOS HACK: Video Sink Routing ---
     // Forces Safari to use the main speaker and high-priority audio mode.
     if (isIOS) {
-       audioOutputDestination = audioContext.createMediaStreamDestination();
-       
-       const video = document.createElement('video');
-       video.setAttribute('playsinline', 'true');
-       video.setAttribute('autoplay', 'true');
-       video.setAttribute('muted', 'true'); // Required for autoplay on iOS
-       video.style.position = 'absolute';
-       video.style.pointerEvents = 'none';
-       video.style.opacity = '0';
-       video.style.width = '1px';
-       video.style.height = '1px';
-       document.body.appendChild(video);
-       
-       video.srcObject = audioOutputDestination.stream;
-       video.play().catch(e => console.warn('[VideoSink] play failed:', e));
-       
-       masterGain.connect(audioOutputDestination);
+       try {
+         audioOutputDestination = audioContext.createMediaStreamDestination();
+         
+         const video = document.createElement('video');
+         video.setAttribute('playsinline', 'true');
+         video.setAttribute('autoplay', 'true');
+         video.setAttribute('muted', 'true'); // Required for autoplay on iOS
+         video.style.position = 'absolute';
+         video.style.pointerEvents = 'none';
+         video.style.opacity = '0';
+         video.style.width = '1px';
+         video.style.height = '1px';
+         document.body.appendChild(video);
+         
+         video.srcObject = audioOutputDestination.stream;
+         video.play().catch(e => console.warn('[VideoSink] play failed:', e));
+         
+         // On iOS, connect ONLY to the video sink for output consistency
+         masterGain.connect(audioOutputDestination);
+       } catch (e) {
+         console.error('[VideoSink] init failed:', e);
+         masterGain.connect(audioContext.destination);
+       }
+    } else {
+       // On Non-iOS, connect to the standard destination
+       masterGain.connect(audioContext.destination);
     }
-    
-    // Always connect to default destination
-    masterGain.connect(audioContext.destination);
   }
   return audioContext;
 }

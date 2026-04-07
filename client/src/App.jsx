@@ -373,6 +373,12 @@ export default function App() {
 
   const handleAuth = async (e) => {
     e.preventDefault();
+    
+    // GESTURE CAPTURE: Initialize audio EXACTLY on the click event before any awaits.
+    // This is crucial for Safari/iOS compatibility.
+    initAudioContext(); 
+    primeAudioSession();
+
     setAuthError('');
     setAuthLoading(true);
     try {
@@ -393,10 +399,6 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) { setAuthError(data.error || 'Gagal'); setAuthLoading(false); return; }
       
-      // FIRST INTERACTION: Initialize Audio Context on Login/Register
-      initAudioContext(); 
-      primeAudioSession();
-
       setUsername(data.user.display_name);
       setUserPhone(data.user.phone);
       setUserProfile(data.user);
