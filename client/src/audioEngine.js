@@ -153,12 +153,20 @@ export function createMicCapture(stream, onChunk) {
   const sampleRate = ctx.sampleRate; // ACTUAL device sample rate
 
   processor.onaudioprocess = (e) => {
-    const samples = e.inputBuffer.getChannelData(0);
+    let samples = e.inputBuffer.getChannelData(0);
+    const TARGET_RATE = 16000;
+    const nativeRate = ctx.sampleRate;
 
     // Energy VAD — skip silent frames
     let sum = 0;
     for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
     if (Math.sqrt(sum / samples.length) < 0.004) return;
+
+    // NEW: Bandwidth Optimization — Downsample to 16kHz (Standard HD Voice)
+    // This reduces data usage by ~66%, making it stable on weak/nighttime networks
+    if (nativeRate !== TARGET_RATE) {
+      samples = resampleAudio(samples, nativeRate, TARGET_RATE);
+    }
 
     // Convert Float32 → Int16
     const int16 = new Int16Array(samples.length);
@@ -166,7 +174,7 @@ export function createMicCapture(stream, onChunk) {
       int16[i] = Math.max(-32768, Math.min(32767, samples[i] * 32767));
     }
 
-    onChunk(int16.buffer, sampleRate);
+    onChunk(int16.buffer, TARGET_RATE);
   };
 
   // Silent output node to keep graph alive without feeding back to speakers

@@ -178,8 +178,8 @@ export default function App() {
         }
 
         // Resync jitter buffer
-        if (playTime < ctx.currentTime)          playTime = ctx.currentTime + 0.04; // 40ms offset for Safari stability
-        if (playTime > ctx.currentTime + 1.0)    playTime = ctx.currentTime + 0.04;
+        if (playTime < ctx.currentTime)          playTime = ctx.currentTime + 0.06; // 60ms offset for mobile/nighttime stability
+        if (playTime > ctx.currentTime + 1.0)    playTime = ctx.currentTime + 0.06;
 
         // Always create at LOCAL rate after resampling
         const buf = ctx.createBuffer(1, f32.length, ctx.sampleRate);
