@@ -22,7 +22,8 @@ let audioContext  = null;
 let masterGain    = null;
 let receiverAnalyser = null;
 let micAnalyser   = null;
-let silentAudio   = null; // For iOS priming
+let silentAudio   = null; 
+let audioOutputDestination = null; // For iOS Video Sink hack
 
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
@@ -75,9 +76,32 @@ export function initAudioContext() {
       latencyHint: 'interactive',
     });
     
-    // Some iOS versions need to see activity to fully unlock
     masterGain = audioContext.createGain();
     masterGain.gain.value = 1.0;
+
+    // --- ULTIMATE iOS HACK: Video Sink Routing ---
+    // Forces Safari to use the main speaker and high-priority audio mode.
+    if (isIOS) {
+       audioOutputDestination = audioContext.createMediaStreamDestination();
+       
+       const video = document.createElement('video');
+       video.setAttribute('playsinline', 'true');
+       video.setAttribute('autoplay', 'true');
+       video.setAttribute('muted', 'true'); // Required for autoplay on iOS
+       video.style.position = 'absolute';
+       video.style.pointerEvents = 'none';
+       video.style.opacity = '0';
+       video.style.width = '1px';
+       video.style.height = '1px';
+       document.body.appendChild(video);
+       
+       video.srcObject = audioOutputDestination.stream;
+       video.play().catch(e => console.warn('[VideoSink] play failed:', e));
+       
+       masterGain.connect(audioOutputDestination);
+    }
+    
+    // Always connect to default destination
     masterGain.connect(audioContext.destination);
   }
   return audioContext;

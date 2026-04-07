@@ -392,6 +392,11 @@ export default function App() {
       }
       const data = await res.json();
       if (!res.ok) { setAuthError(data.error || 'Gagal'); setAuthLoading(false); return; }
+      
+      // FIRST INTERACTION: Initialize Audio Context on Login/Register
+      initAudioContext(); 
+      primeAudioSession();
+
       setUsername(data.user.display_name);
       setUserPhone(data.user.phone);
       setUserProfile(data.user);
@@ -413,6 +418,11 @@ export default function App() {
   };
 
   const joinChannel = (ch) => {
+    // FIRST INTERACTION: Initialize and Resume Audio Context on channel join
+    const ctx = initAudioContext();
+    primeAudioSession();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+
     stopRadio(); // PROTECTIVE MUTING: Silence the radio before entering PTT zone!
     setChannel(ch);
     setMessages([]); 
