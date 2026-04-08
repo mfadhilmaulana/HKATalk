@@ -1,252 +1,266 @@
-/**
- * audioEngine.js — Clean & Reliable PTT Audio Pipeline
- *
- * DESIGN PHILOSOPHY (lessons learned):
- *  - AudioWorklet re-initialized each PTT = multiple node accumulation = alien voice → REMOVED
- *  - Forced 48000Hz sample rate on devices with 44100Hz native = pitch shift = alien voice → REMOVED
- *  - Static noise through speakers = mic picks it up = feedback → REMOVED
- *  - Heavy brickwall 20:1 compressor = pumping/reverb = artifact → Replaced with 4:1 soft
- *  - Per-chunk gain automation = reverb tail at chunk edges → REMOVED
- *
- * Architecture:
- *  Sender: getUserMedia (native rate) → ScriptProcessor (reliable) → Int16 PCM + sampleRate → Socket
- *  Receiver: Socket → Int16→Float32 → AudioBuffer at SENDER's sample rate → Output
- */
-
-// Use the device's OWN native sample rate — do NOT force 48000
-// Different devices: iOS=44100, most Android/Desktop=44100 or 48000
-// We report the actual rate with every packet so receiver always decodes correctly
-export const AUDIO_SAMPLE_RATE = null; // UNUSED — use ctx.sampleRate dynamically
-
-let audioContext  = null;
-let masterGain    = null;
+export const AUDIO_SAMPLE_RATE = 16000;
+let audioContext = null;
+let masterGainNode = null;
+let staticNoiseNode = null;
 let receiverAnalyser = null;
-let micAnalyser   = null;
-
-// ── AudioContext ──────────────────────────────────────────────────────────────
+let micAnalyser = null;
 
 export function initAudioContext() {
   if (!audioContext) {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)({
-      latencyHint: 'interactive', // lowest possible latency
-    });
-    masterGain = audioContext.createGain();
-    masterGain.gain.value = 1.0;
-    masterGain.connect(audioContext.destination);
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: AUDIO_SAMPLE_RATE });
+    masterGainNode = audioContext.createGain();
+    masterGainNode.connect(audioContext.destination);
   }
   return audioContext;
 }
 
-// ── Speaker Mute ──────────────────────────────────────────────────────────────
+export function startStaticNoise() {
+  const ctx = initAudioContext();
+  if (staticNoiseNode || !ctx) return;
+  const bufferSize = 2 * ctx.sampleRate;
+  const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const output = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    output[i] = Math.random() * 2 - 1; 
+  }
+  staticNoiseNode = ctx.createBufferSource();
+  staticNoiseNode.buffer = noiseBuffer;
+  staticNoiseNode.loop = true;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 3000;
+  
+  const gain = ctx.createGain();
+  gain.gain.value = 0.0125; 
+
+  staticNoiseNode.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination); // bypass master mute
+  staticNoiseNode.start(0);
+}
+
+export function stopStaticNoise() {
+  if (staticNoiseNode) {
+    try { staticNoiseNode.stop(); } catch(e){}
+    staticNoiseNode.disconnect();
+    staticNoiseNode = null;
+  }
+}
 
 export function setSpeakerMute(isMuted) {
-  if (!masterGain || !audioContext) return;
-  masterGain.gain.cancelScheduledValues(audioContext.currentTime);
-  if (isMuted) {
-    masterGain.gain.setValueAtTime(0, audioContext.currentTime);
-  } else {
-    // 20ms soft ramp to avoid click on unmute
-    masterGain.gain.setValueAtTime(0, audioContext.currentTime);
-    masterGain.gain.linearRampToValueAtTime(1.0, audioContext.currentTime + 0.02);
-  }
-}
-
-// ── Receiver Chain ────────────────────────────────────────────────────────────
-
-export function createReceiverChain() {
-  const ctx = initAudioContext();
-
-  // 120Hz high-pass: remove rumble / wind / handling noise
-  const hp = ctx.createBiquadFilter();
-  hp.type = 'highpass';
-  hp.frequency.value = 120;
-  hp.Q.value = 0.7;
-
-  // 8kHz low-pass: cut harsh HF artifacts above voice band
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = 8000;
-  lp.Q.value = 0.7;
-
-  // Gentle 4:1 soft-knee limiter (no pumping)
-  const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -6;
-  comp.knee.value      = 6;
-  comp.ratio.value     = 4;
-  comp.attack.value    = 0.003;
-  comp.release.value   = 0.25;
-
-  // Analyser for visualizer
-  receiverAnalyser = ctx.createAnalyser();
-  receiverAnalyser.fftSize = 64;
-  receiverAnalyser.smoothingTimeConstant = 0.4;
-
-  hp.connect(lp);
-  lp.connect(comp);
-  comp.connect(receiverAnalyser);
-  receiverAnalyser.connect(masterGain); // masterGain controls mute
-
-  return { input: hp };
-}
-
-export function getReceiverAnalyser() { return receiverAnalyser; }
-
-// ── Mic (ScriptProcessor — reliable & universal across all browsers/devices) ──
-
-/**
- * Create microphone capture node.
- * Returns { scriptNode, source } — caller keeps track for cleanup.
- * onChunk(int16Buffer, sampleRate) is called for each non-silent frame.
- */
-export function createMicCapture(stream, onChunk) {
-  const ctx = initAudioContext();
-  const source = ctx.createMediaStreamSource(stream);
-
-  // 2048 samples = ~43ms at 48kHz, ~46ms at 44100Hz — good balance of latency vs reliability
-  const processor = ctx.createScriptProcessor(2048, 1, 1);
-  const sampleRate = ctx.sampleRate; // ACTUAL device sample rate
-
-  processor.onaudioprocess = (e) => {
-    const samples = e.inputBuffer.getChannelData(0);
-
-    // Energy VAD — skip silent frames (keeps bandwidth low)
-    let sum = 0;
-    for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
-    if (Math.sqrt(sum / samples.length) < 0.004) return;
-
-    // Convert Float32 → Int16
-    const int16 = new Int16Array(samples.length);
-    for (let i = 0; i < samples.length; i++) {
-      int16[i] = Math.max(-32768, Math.min(32767, samples[i] * 32767));
+  if (masterGainNode && audioContext) {
+    if (isMuted) {
+      // Hard cut to zero instantly — no ramp, eliminates any bleed-through
+      masterGainNode.gain.cancelScheduledValues(audioContext.currentTime);
+      masterGainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    } else {
+      // Short 15ms ramp up to avoid click/pop on unmute
+      masterGainNode.gain.cancelScheduledValues(audioContext.currentTime);
+      masterGainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      masterGainNode.gain.linearRampToValueAtTime(1.0, audioContext.currentTime + 0.015);
     }
-
-    onChunk(int16.buffer, sampleRate);
-  };
-
-  // Silent output node to keep graph alive without feeding back to speakers
-  const silent = ctx.createGain();
-  silent.gain.value = 0;
-
-  source.connect(processor);
-  processor.connect(silent);
-  silent.connect(ctx.destination);
-
-  // Mic analyser tap for visualizer
-  micAnalyser = ctx.createAnalyser();
-  micAnalyser.fftSize = 64;
-  micAnalyser.smoothingTimeConstant = 0.4;
-  source.connect(micAnalyser);
-  const micSilent = ctx.createGain();
-  micSilent.gain.value = 0;
-  micAnalyser.connect(micSilent);
-  micSilent.connect(ctx.destination);
-
-  return { processor, source, silent };
-}
-
-export function getMicAnalyser() { return micAnalyser; }
-
-export function clearMicAnalyser() {
-  if (micAnalyser) {
-    try { micAnalyser.disconnect(); } catch(e) {}
-    micAnalyser = null;
   }
 }
-
-// ── Beeps ─────────────────────────────────────────────────────────────────────
 
 export function playZelloBeep(type) {
   const ctx = initAudioContext();
-  const t   = ctx.currentTime;
-  const dst = ctx.destination; // bypass masterGain so beeps are always audible
-
-  const osc  = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = 'sine';
-
+  const t = ctx.currentTime;
+  
+  // Beeps connect bypass the masterGainNode straight to destination
+  // So you still hear your own beeps even when the network channel is muted
+  const destination = ctx.destination;
+  
   if (type === 'start') {
-    osc.frequency.setValueAtTime(880, t);
-    osc.frequency.setValueAtTime(1200, t + 0.065);
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.setValueAtTime(1200, t + 0.05);
+    
     gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(0.12, t + 0.01);
-    gain.gain.setValueAtTime(0.12, t + 0.095);
-    gain.gain.linearRampToValueAtTime(0, t + 0.12);
-  } else {
+    gain.gain.linearRampToValueAtTime(0.1, t + 0.01);
+    gain.gain.setValueAtTime(0.1, t + 0.08);
+    gain.gain.linearRampToValueAtTime(0, t + 0.1);
+    
+    osc.connect(gain);
+    gain.connect(destination);
+    osc.start(t);
+    osc.stop(t + 0.1);
+  } else if (type === 'end') {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    
     osc.frequency.setValueAtTime(1000, t);
     gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(0.12, t + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    gain.gain.linearRampToValueAtTime(0.1, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    
+    osc.connect(gain);
+    gain.connect(destination);
+    osc.start(t);
+    osc.stop(t + 0.1);
   }
-
-  osc.connect(gain);
-  gain.connect(dst);
-  osc.start(t);
-  osc.stop(t + 0.15);
 }
-
-// ── Ringtone ──────────────────────────────────────────────────────────────────
 
 let ringInterval = null;
 
 export function playRingtone() {
   const ctx = initAudioContext();
   if (ringInterval) return;
-
-  const ring = () => {
-    [[0, 440], [0, 480], [0.6, 440], [0.6, 480]].forEach(([offset, freq]) => {
-      const t    = ctx.currentTime + offset;
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, t);
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.1, t + 0.05);
-      gain.gain.setValueAtTime(0.1, t + 0.4);
-      gain.gain.linearRampToValueAtTime(0, t + 0.45);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.5);
-    });
+  
+  const beep = () => {
+     const t = ctx.currentTime;
+     const osc1 = ctx.createOscillator();
+     const osc2 = ctx.createOscillator();
+     const gain = ctx.createGain();
+     
+     osc1.type = 'sine';
+     osc2.type = 'sine';
+     osc1.frequency.setValueAtTime(440, t); // Standard European/UK ring tone freq 1
+     osc2.frequency.setValueAtTime(480, t); // Standard freq 2
+     
+     gain.gain.setValueAtTime(0, t);
+     gain.gain.linearRampToValueAtTime(0.1, t + 0.05);
+     gain.gain.setValueAtTime(0.1, t + 0.4);
+     gain.gain.linearRampToValueAtTime(0, t + 0.45);
+     
+     osc1.connect(gain);
+     osc2.connect(gain);
+     gain.connect(ctx.destination);
+     
+     osc1.start(t);
+     osc2.start(t);
+     osc1.stop(t + 0.5);
+     osc2.stop(t + 0.5);
+     
+     // Double ring pattern: ring, pause, ring
+     const t2 = t + 0.6;
+     const osc3 = ctx.createOscillator();
+     const osc4 = ctx.createOscillator();
+     const gain2 = ctx.createGain();
+     
+     osc3.type = 'sine';
+     osc4.type = 'sine';
+     osc3.frequency.setValueAtTime(440, t2);
+     osc4.frequency.setValueAtTime(480, t2);
+     
+     gain2.gain.setValueAtTime(0, t2);
+     gain2.gain.linearRampToValueAtTime(0.1, t2 + 0.05);
+     gain2.gain.setValueAtTime(0.1, t2 + 0.4);
+     gain2.gain.linearRampToValueAtTime(0, t2 + 0.45);
+     
+     osc3.connect(gain2);
+     osc4.connect(gain2);
+     gain2.connect(ctx.destination);
+     
+     osc3.start(t2);
+     osc4.start(t2);
+     osc3.stop(t2 + 0.5);
+     osc4.stop(t2 + 0.5);
   };
-
-  ring();
-  ringInterval = setInterval(ring, 3000);
+  
+  beep();
+  ringInterval = setInterval(beep, 3000); // repeat every 3 seconds
 }
 
 export function stopRingtone() {
-  if (ringInterval) { clearInterval(ringInterval); ringInterval = null; }
+  if (ringInterval) {
+    clearInterval(ringInterval);
+    ringInterval = null;
+  }
 }
 
-// ── Siren ─────────────────────────────────────────────────────────────────────
-
 export function playSiren() {
-  const ctx  = initAudioContext();
-  const t    = ctx.currentTime;
-  const osc  = ctx.createOscillator();
+  const ctx = initAudioContext();
+  const t = ctx.currentTime;
+  const destination = ctx.destination; // MUST bypass masterGainNode !
+  
+  const osc = ctx.createOscillator();
   const gain = ctx.createGain();
+  
   osc.type = 'square';
+  // Modulate frequency like an emergency siren
   osc.frequency.setValueAtTime(600, t);
   osc.frequency.linearRampToValueAtTime(1200, t + 0.5);
-  osc.frequency.linearRampToValueAtTime(600,  t + 1.0);
+  osc.frequency.linearRampToValueAtTime(600, t + 1.0);
   osc.frequency.linearRampToValueAtTime(1200, t + 1.5);
-  osc.frequency.linearRampToValueAtTime(600,  t + 2.0);
+  osc.frequency.linearRampToValueAtTime(600, t + 2.0);
+  
   gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(0.2, t + 0.1);
+  gain.gain.linearRampToValueAtTime(0.2, t + 0.1); // Extremely loud
   gain.gain.setValueAtTime(0.2, t + 1.9);
   gain.gain.linearRampToValueAtTime(0, t + 2.0);
+  
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(destination); // Bypass master mute
   osc.start(t);
   osc.stop(t + 2.0);
 }
 
-// ── No-ops kept for API compatibility ─────────────────────────────────────────
-export function startStaticNoise() {}
-export function stopStaticNoise()  {}
+export function createReceiverChain() {
+  const ctx = initAudioContext();
+  
+  // High-pass at 120Hz to cut rumble/noise floor
+  const highpass = ctx.createBiquadFilter();
+  highpass.type = 'highpass';
+  highpass.frequency.value = 120;
+  highpass.Q.value = 0.7;
+  
+  // Low-pass at 8000Hz to cut harsh high-frequency artifacts
+  const lowpass = ctx.createBiquadFilter();
+  lowpass.type = 'lowpass';
+  lowpass.frequency.value = 8000;
+  lowpass.Q.value = 0.7;
 
-// Stub for old import compatibility
-export function createMicWorklet()  { return Promise.resolve(null); }
-export function startMicWorklet()   {}
-export function stopMicWorklet()    {}
-export function createMicAnalyser() {}
+  // Gentle soft-knee limiter — NOT a brickwall compressor (ratio 20:1 caused pumping/reverb)
+  const compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -6;   // Only limit peaks
+  compressor.knee.value = 6;          // Soft knee = no abrupt gain changes  
+  compressor.ratio.value = 4;         // 4:1 gentle — doesn't pump
+  compressor.attack.value = 0.003;    // 3ms attack — fast enough to catch peaks
+  compressor.release.value = 0.25;    // 250ms release — smooth, not reverby
+
+  // Audio Visualizer Analyser
+  receiverAnalyser = ctx.createAnalyser();
+  receiverAnalyser.fftSize = 64;
+  receiverAnalyser.smoothingTimeConstant = 0.4; // Less smoothing = more responsive, less reverb feel
+
+  highpass.connect(lowpass);
+  lowpass.connect(compressor);
+  compressor.connect(receiverAnalyser);
+  receiverAnalyser.connect(masterGainNode);
+  
+  return { input: highpass };
+}
+
+export function getReceiverAnalyser() {
+  return receiverAnalyser;
+}
+
+export function createMicAnalyser(sourceNode) {
+  const ctx = initAudioContext();
+  micAnalyser = ctx.createAnalyser();
+  micAnalyser.fftSize = 64;
+  micAnalyser.smoothingTimeConstant = 0.75;
+  sourceNode.connect(micAnalyser);
+  // Connect to a zero-gain so the analyser stays alive but produces no sound
+  const silentGain = ctx.createGain();
+  silentGain.gain.value = 0;
+  micAnalyser.connect(silentGain);
+  silentGain.connect(ctx.destination);
+  return micAnalyser;
+}
+
+export function getMicAnalyser() {
+  return micAnalyser;
+}
+
+export function clearMicAnalyser() {
+  if (micAnalyser) {
+    try { micAnalyser.disconnect(); } catch(e){}
+    micAnalyser = null;
+  }
+}

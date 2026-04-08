@@ -9,9 +9,10 @@ import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
-import { initAudioContext, playZelloBeep, createReceiverChain, createMicCapture, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, clearMicAnalyser } from './audioEngine';
+import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, createMicAnalyser, clearMicAnalyser, AUDIO_SAMPLE_RATE } from './audioEngine';
 
-let micCapture = null;   // { processor, source, silent } from createMicCapture
+let mediaStreamSource = null;
+let scriptNode = null;
 let globalStream = null;
 let globalVideoStream = null;
 let videoInterval = null;
@@ -76,9 +77,11 @@ export default function App() {
     if (!username || !userPhone) return;
     if (socket) return; // Prevent double connections
 
-    // Init AudioContext eagerly — needed for beeps and receiver chain
-    initAudioContext().resume().catch(() => {});
-    if (!receiverChain) receiverChain = createReceiverChain();
+    initAudioContext().resume();
+    
+    if (!receiverChain) {
+      receiverChain = createReceiverChain();
+    }
 
     const newSocket = io();
     setSocket(newSocket);
@@ -87,10 +90,7 @@ export default function App() {
       newSocket.emit('register-user', { phone: userPhone });
     });
 
-    // channel-info: sent to the joining user
     newSocket.on('channel-info', ({ participants }) => setParticipants(participants));
-    // channel-members: broadcast to ALL users in channel when anyone joins/leaves
-    newSocket.on('channel-members', ({ participants }) => setParticipants(participants));
     newSocket.on('user-joined', (user) => setParticipants(prev => [...prev.filter(p => p.id !== user.id), user]));
     newSocket.on('user-left', (user) => setParticipants(prev => prev.filter(p => p.id !== user.id)));
 
@@ -107,6 +107,7 @@ export default function App() {
     });
 
     newSocket.on('video-frame', (data) => {
+      // Show frame if it corresponds to the active speaker
       setActiveFrame(data.frame);
     });
 
@@ -116,6 +117,7 @@ export default function App() {
     });
 
     newSocket.on('incoming-message-notif', (data) => {
+      // In-app notification for messages
       if (navState !== 'chat') {
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification(`Pesan Baru dari ${data.senderName}`, {
@@ -146,6 +148,7 @@ export default function App() {
         setActiveFrame(null);
         if (!isRecordingRef.current) {
           playZelloBeep('start');
+          // DO NOT play static noise - it gets picked up by mic causing feedback
           playTime = initAudioContext().currentTime + 0.05;
         }
       } 
@@ -153,49 +156,49 @@ export default function App() {
         setActiveSpeaker(null);
         setActiveFrame(null);
         if (!isRecordingRef.current) {
+          // No static noise to stop
           playZelloBeep('end');
         }
       } 
-
       if (data.type === 'chunk' && data.buffer) {
         if (isRecordingRef.current) return;
-        // Self-echo guard
+        // Self-echo guard: don't play back our own transmitted audio
         if (payload.username === username) return;
-        if (!receiverChain) receiverChain = createReceiverChain();
-
-        // Ensure AudioContext is running (can go suspended on mobile after inactivity)
-        const ctx = initAudioContext();
-        if (ctx.state !== 'running') ctx.resume().catch(() => {});
-
-        try {
-          // In browsers, socket.io-client delivers binary as ArrayBuffer natively.
-          // Direct Int16Array view works in all browsers.
-          const int16 = new Int16Array(data.buffer);
-          const f32   = new Float32Array(int16.length);
-          for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32767;
-
-          const senderRate = data.sampleRate || ctx.sampleRate;
-
-          // Resync jitter buffer
-          if (playTime < ctx.currentTime)          playTime = ctx.currentTime + 0.02;
-          if (playTime > ctx.currentTime + 1.0)    playTime = ctx.currentTime + 0.02;
-
-          const buf = ctx.createBuffer(1, f32.length, senderRate);
-          buf.getChannelData(0).set(f32);
-
-          const src = ctx.createBufferSource();
-          src.buffer = buf;
-          src.connect(receiverChain.input);
-          src.start(playTime);
-          playTime += buf.duration;
-        } catch(e) {
-          console.warn('[audio-rx] error:', e.message);
+        // Guard: ensure receiverChain is initialized
+        if (!receiverChain) {
+          receiverChain = createReceiverChain();
         }
+
+        const int16Array = new Int16Array(data.buffer);
+        const float32Array = new Float32Array(int16Array.length);
+        for (let i = 0; i < int16Array.length; i++) {
+          float32Array[i] = int16Array[i] / 0x7FFF;
+        }
+        
+        const ctx = initAudioContext();
+        // Resync if playTime drifted behind
+        if (playTime < ctx.currentTime) {
+          playTime = ctx.currentTime + 0.02;
+        }
+        // Flush if too far ahead (>1s) to prevent double-buffering
+        if (playTime > ctx.currentTime + 1.0) {
+          playTime = ctx.currentTime + 0.02;
+        }
+        
+        const audioBuffer = ctx.createBuffer(1, float32Array.length, AUDIO_SAMPLE_RATE);
+        audioBuffer.getChannelData(0).set(float32Array);
+        
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        // Direct connection — no per-chunk gain envelope (was causing reverb artifacts)
+        source.connect(receiverChain.input);
+        source.start(playTime);
+        playTime += audioBuffer.duration;
       }
     });
 
     return () => {
-       // Keep socket alive for background signaling
+       // We don't disconnect socket easily anymore to let signaling work in background
     }
   }, [username, userPhone]);
 
@@ -227,59 +230,92 @@ export default function App() {
     }
   };
 
+
   const startRecording = async () => {
     if (isRecordingRef.current) return;
-
-    // Stop radio to avoid feedback
-    if (activeRadio) stopRadio();
-
-    // Immediately mute speaker + flush audio queue
+    
+    // Auto-stop radio when PTT is pressed
+    if (activeRadio) {
+      stopRadio();
+    }
+    
+    // Immediately mute speaker to prevent any feedback
     setSpeakerMute(true);
+    // Flush the audio queue so no stale chunks play through the mute window
     playTime = initAudioContext().currentTime + 999;
 
     const ctx = initAudioContext();
     if (ctx.state === 'suspended') await ctx.resume();
-
-    // Signal peers we're starting to transmit
+    
     setIsRecording(true);
     isRecordingRef.current = true;
+    
     playZelloBeep('start');
     if (socket) socket.emit('audio-stream', { type: 'start' });
 
     try {
-      // Get mic stream (re-use cached if still active)
       if (!globalStream || !globalStream.active || globalStream.getAudioTracks().some(t => t.readyState === 'ended')) {
-        globalStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
+        globalStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: { 
             channelCount: 1,
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
+            sampleRate: AUDIO_SAMPLE_RATE,
+            echoCancellation: { ideal: true }, 
+            noiseSuppression: { ideal: true },
+            autoGainControl: { ideal: true },
             googEchoCancellation: true,
             googAutoGainControl: true,
             googNoiseSuppression: true,
             googHighpassFilter: true,
-            googExperimentalEchoCancellation: true,
-            googExperimentalNoiseSuppression: true,
-          }
+            googTypingNoiseDetection: true,
+            googNoiseReduction: true
+          } 
         });
       }
-
-      // ScriptProcessor — reliable across ALL browsers & devices
-      micCapture = createMicCapture(globalStream, (pcmBuffer, sampleRate) => {
+      
+      mediaStreamSource = ctx.createMediaStreamSource(globalStream);
+      scriptNode = ctx.createScriptProcessor(1024, 1, 1); // 1024 = ~64ms latency at 16kHz (was 4096 = 256ms)
+      
+      scriptNode.onaudioprocess = (e) => {
         if (!isRecordingRef.current) return;
-        if (socket) socket.emit('audio-stream', { type: 'chunk', buffer: pcmBuffer, sampleRate });
-      });
+        const float32Array = e.inputBuffer.getChannelData(0);
+        
+        let rms = 0;
+        for (let i = 0; i < float32Array.length; i++) {
+          rms += float32Array[i] * float32Array[i];
+        }
+        rms = Math.sqrt(rms / float32Array.length);
+        
+        // Lower threshold: 0.003 so soft voices aren't gated out (was 0.01 which cut syllable edges)
+        if (rms < 0.003) {
+          return; 
+        }
 
-      // Video broadcast
+        const int16Array = new Int16Array(float32Array.length);
+        for (let i = 0; i < float32Array.length; i++) {
+          int16Array[i] = Math.max(-1, Math.min(1, float32Array[i])) * 0x7FFF;
+        }
+        if (socket) socket.emit('audio-stream', { type: 'chunk', buffer: int16Array.buffer });
+      };
+      
+      const zeroGain = ctx.createGain();
+      zeroGain.gain.value = 0;
+      
+      mediaStreamSource.connect(scriptNode);
+      scriptNode.connect(zeroGain);
+      zeroGain.connect(ctx.destination);
+
+      // Connect mic analyser for the audio visualizer
+      createMicAnalyser(mediaStreamSource);
+
+      // Start Video broadcast loop if Video is enabled!
       if (isVideoEnabled && localVideoRef.current) {
         videoInterval = setInterval(() => {
           captureVideoFrame(localVideoRef.current, socket, username, channel);
-        }, 200);
+        }, 200); // 5 FPS
       }
     } catch (err) {
-      console.error('Mic error:', err);
-      alert('Gagal mengakses mikrofon: ' + err.message);
+      console.error('Error accessing microphone:', err);
+      alert('Microphone access is required to talk.');
       stopRecording();
     }
   };
@@ -288,23 +324,29 @@ export default function App() {
     if (!isRecordingRef.current) return;
     setIsRecording(false);
     isRecordingRef.current = false;
-
+    
     setTimeout(() => { playZelloBeep('end'); }, 100);
     if (socket) socket.emit('audio-stream', { type: 'end' });
 
-    // Cleanup mic capture nodes
-    if (micCapture) {
-      try { micCapture.processor.disconnect(); } catch(e){}
-      try { micCapture.source.disconnect(); }    catch(e){}
-      try { micCapture.silent.disconnect(); }    catch(e){}
-      micCapture = null;
+    if (scriptNode) {
+      scriptNode.disconnect();
+      scriptNode = null;
+    }
+    if (mediaStreamSource) {
+      mediaStreamSource.disconnect();
+      mediaStreamSource = null;
+    }
+    
+    if (videoInterval) {
+      clearInterval(videoInterval);
+      videoInterval = null;
     }
 
-    if (videoInterval) { clearInterval(videoInterval); videoInterval = null; }
     clearMicAnalyser();
 
-    // Reset jitter buffer + unmute after holdoff
+    // Reset playTime so incoming audio resumes cleanly after PTT
     playTime = 0;
+    // Unmute with a generous holdoff so receiver chain is fully flushed
     setTimeout(() => { setSpeakerMute(false); }, 500);
   };
 
