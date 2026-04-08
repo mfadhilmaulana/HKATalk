@@ -76,10 +76,13 @@ export default function App() {
     if (!username || !userPhone) return;
     if (socket) return; // Prevent double connections
 
-    initAudioContext().resume();
-    
-    if (!receiverChain) {
-      receiverChain = createReceiverChain();
+    // Initialize audio context lazily — don't let it block socket creation
+    try {
+      const ctx = initAudioContext();
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      if (!receiverChain) receiverChain = createReceiverChain();
+    } catch(e) {
+      console.warn('AudioContext init deferred:', e.message);
     }
 
     const newSocket = io();
