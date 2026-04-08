@@ -168,26 +168,42 @@ export default function App() {
         if (payload.username === username) return;
         if (!receiverChain) receiverChain = createReceiverChain();
 
-        const int16 = new Int16Array(data.buffer);
-        const f32   = new Float32Array(int16.length);
-        for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32767;
+        try {
+          // Socket.io may deliver binary as ArrayBuffer, Buffer, or Uint8Array
+          // Normalize to ArrayBuffer so Int16Array view works on all browsers
+          let rawBuf = data.buffer;
+          if (!(rawBuf instanceof ArrayBuffer)) {
+            // Convert Buffer/Uint8Array → ArrayBuffer
+            if (rawBuf.buffer && rawBuf.buffer instanceof ArrayBuffer) {
+              rawBuf = rawBuf.buffer.slice(rawBuf.byteOffset, rawBuf.byteOffset + rawBuf.byteLength);
+            } else if (typeof rawBuf === 'object') {
+              rawBuf = new Uint8Array(Object.values(rawBuf)).buffer;
+            }
+          }
 
-        const ctx = initAudioContext();
-        // Use the SENDER's actual sample rate — this is the key fix for alien voice
-        const senderRate = data.sampleRate || ctx.sampleRate;
+          const int16 = new Int16Array(rawBuf);
+          const f32   = new Float32Array(int16.length);
+          for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32767;
 
-        // Resync jitter buffer
-        if (playTime < ctx.currentTime)          playTime = ctx.currentTime + 0.02;
-        if (playTime > ctx.currentTime + 1.0)    playTime = ctx.currentTime + 0.02;
+          const ctx = initAudioContext();
+          if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+          const senderRate = data.sampleRate || ctx.sampleRate;
 
-        const buf = ctx.createBuffer(1, f32.length, senderRate);
-        buf.getChannelData(0).set(f32);
+          // Resync jitter buffer
+          if (playTime < ctx.currentTime)          playTime = ctx.currentTime + 0.02;
+          if (playTime > ctx.currentTime + 1.0)    playTime = ctx.currentTime + 0.02;
 
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        src.connect(receiverChain.input);
-        src.start(playTime);
-        playTime += buf.duration;
+          const buf = ctx.createBuffer(1, f32.length, senderRate);
+          buf.getChannelData(0).set(f32);
+
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(receiverChain.input);
+          src.start(playTime);
+          playTime += buf.duration;
+        } catch(e) {
+          console.warn('[audio-rx] decode error:', e.message);
+        }
       }
     });
 
