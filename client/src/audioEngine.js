@@ -100,19 +100,33 @@ export function getReceiverAnalyser() { return receiverAnalyser; }
  */
 export function createMicCapture(stream, onChunk) {
   const ctx = initAudioContext();
+
+  // CRITICAL: ScriptProcessor won't fire if AudioContext is suspended
+  // Force resume — this is safe to call even if already running
+  if (ctx.state !== 'running') {
+    ctx.resume().catch(() => {});
+  }
+
   const source = ctx.createMediaStreamSource(stream);
 
-  // 2048 samples = ~43ms at 48kHz, ~46ms at 44100Hz — good balance of latency vs reliability
+  // 2048 samples = ~43ms at 48kHz — good balance of latency vs reliability
   const processor = ctx.createScriptProcessor(2048, 1, 1);
   const sampleRate = ctx.sampleRate; // ACTUAL device sample rate
 
+  let frameCount = 0;
+
   processor.onaudioprocess = (e) => {
+    frameCount++;
     const samples = e.inputBuffer.getChannelData(0);
 
-    // Energy VAD — skip silent frames
-    let sum = 0;
-    for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
-    if (Math.sqrt(sum / samples.length) < 0.004) return;
+    // REMOVED energy VAD — browser AEC/NS already handles noise.
+    // VAD threshold was silently blocking audio on devices with strong echo cancellation.
+    // Only skip frames that are absolute zero (truly empty buffer from OS padding)
+    let hasSignal = false;
+    for (let i = 0; i < samples.length; i++) {
+      if (samples[i] !== 0) { hasSignal = true; break; }
+    }
+    if (!hasSignal) return;
 
     // Convert Float32 → Int16
     const int16 = new Int16Array(samples.length);
@@ -123,7 +137,7 @@ export function createMicCapture(stream, onChunk) {
     onChunk(int16.buffer, sampleRate);
   };
 
-  // Silent output node to keep graph alive without feeding back to speakers
+  // Silent output node — MUST be connected to destination or onaudioprocess won't fire in all browsers
   const silent = ctx.createGain();
   silent.gain.value = 0;
 
@@ -140,6 +154,13 @@ export function createMicCapture(stream, onChunk) {
   micSilent.gain.value = 0;
   micAnalyser.connect(micSilent);
   micSilent.connect(ctx.destination);
+
+  // Safety watchdog: if ScriptProcessor has not fired after 500ms, try resuming context
+  setTimeout(() => {
+    if (frameCount === 0 && ctx.state !== 'running') {
+      ctx.resume().catch(() => {});
+    }
+  }, 500);
 
   return { processor, source, silent };
 }
