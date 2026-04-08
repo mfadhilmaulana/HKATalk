@@ -98,6 +98,10 @@ export default function App() {
        setMessages(prev => [...prev, { ...data, self: false }]);
     });
     
+    newSocket.on('channel-members', ({ participants }) => {
+       setParticipants(participants);
+    });
+    
     newSocket.on('active-speakers-update', (data) => {
        setGlobalActiveSpeakers(data);
     });
@@ -148,6 +152,8 @@ export default function App() {
         setActiveFrame(null);
         if (!isRecordingRef.current) {
           playZelloBeep('start');
+          // Wake up AudioContext on the receiving side in case it was suspended (mobile Safari/Chrome)
+          initAudioContext().resume();
           // DO NOT play static noise - it gets picked up by mic causing feedback
           playTime = initAudioContext().currentTime + 0.05;
         }
@@ -249,6 +255,9 @@ export default function App() {
     
     setIsRecording(true);
     isRecordingRef.current = true;
+    
+    // Force re-join channel on every PTT press to ensure server room association is fresh
+    if (socket) socket.emit('join-channel', { username, channel });
     
     playZelloBeep('start');
     if (socket) socket.emit('audio-stream', { type: 'start' });
