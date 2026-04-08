@@ -92,7 +92,10 @@ export default function App() {
       newSocket.emit('register-user', { phone: userPhone });
     });
 
+    // channel-info: sent to the joiner with full list
     newSocket.on('channel-info', ({ participants }) => setParticipants(participants));
+    // channel-members: broadcast to EVERYONE in channel when membership changes — fixes detection for existing users
+    newSocket.on('channel-members', ({ participants }) => setParticipants(participants));
     newSocket.on('user-joined', (user) => setParticipants(prev => [...prev.filter(p => p.id !== user.id), user]));
     newSocket.on('user-left', (user) => setParticipants(prev => prev.filter(p => p.id !== user.id)));
 
@@ -216,6 +219,32 @@ export default function App() {
     if (socket && channel && username) {
       socket.emit('join-channel', { username, channel });
       setMessages(prev => [...prev, { text: `Tergabung di saluran: ${channel}`, type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
+
+      // Pre-warm microphone so PTT is INSTANT (no getUserMedia delay on button press)
+      const prewarmMic = async () => {
+        try {
+          if (!globalStream || !globalStream.active || globalStream.getAudioTracks().some(t => t.readyState === 'ended')) {
+            globalStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                channelCount: 1,
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                googEchoCancellation: true,
+                googAutoGainControl: true,
+                googNoiseSuppression: true,
+                googHighpassFilter: true,
+                googExperimentalEchoCancellation: true,
+                googExperimentalNoiseSuppression: true,
+              }
+            });
+          }
+        } catch(e) {
+          // Mic permission not granted yet — will try again on first PTT
+          console.warn('[prewarm] mic not ready yet:', e.message);
+        }
+      };
+      prewarmMic();
     }
   }, [socket, channel, username]);
 
@@ -253,13 +282,9 @@ export default function App() {
     const ctx = initAudioContext();
     if (ctx.state === 'suspended') await ctx.resume();
 
-    setIsRecording(true);
-    isRecordingRef.current = true;
-    playZelloBeep('start');
-    if (socket) socket.emit('audio-stream', { type: 'start' });
-
     try {
-      // Get mic stream with full browser AEC / NS / AGC
+      // Mic stream should already be pre-warmed from channel join.
+      // If not (first press, or stream ended), get it now.
       if (!globalStream || !globalStream.active || globalStream.getAudioTracks().some(t => t.readyState === 'ended')) {
         globalStream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -277,10 +302,15 @@ export default function App() {
         });
       }
 
+      // Mark recording state and notify peers ONLY after mic stream is confirmed ready
+      setIsRecording(true);
+      isRecordingRef.current = true;
+      playZelloBeep('start');
+      if (socket) socket.emit('audio-stream', { type: 'start' });
+
       // ScriptProcessor — reliable across ALL browsers & devices
       micCapture = createMicCapture(globalStream, (pcmBuffer, sampleRate) => {
         if (!isRecordingRef.current) return;
-        // Include sampleRate so receiver decodes at the correct pitch
         if (socket) socket.emit('audio-stream', { type: 'chunk', buffer: pcmBuffer, sampleRate });
       });
 
@@ -293,7 +323,7 @@ export default function App() {
     } catch (err) {
       console.error('Mic error:', err);
       alert('Gagal mengakses mikrofon: ' + err.message);
-      stopRecording();
+      setSpeakerMute(false);
     }
   };
 
