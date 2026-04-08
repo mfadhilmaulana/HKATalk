@@ -9,7 +9,7 @@ import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
-import { initAudioContext, playZelloBeep, createReceiverChain, createMicCapture, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, clearMicAnalyser, resampleAudio, primeAudioSession } from './audioEngine';
+import { initAudioContext, playZelloBeep, createReceiverChain, createMicCapture, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, clearMicAnalyser } from './audioEngine';
 
 let micCapture = null;   // { processor, source, silent } from createMicCapture
 let globalStream = null;
@@ -166,23 +166,18 @@ export default function App() {
         if (!receiverChain) receiverChain = createReceiverChain();
 
         const int16 = new Int16Array(data.buffer);
-        let f32 = new Float32Array(int16.length);
+        const f32   = new Float32Array(int16.length);
         for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32767;
 
         const ctx = initAudioContext();
+        // Use the SENDER's actual sample rate — this is the key fix for alien voice
         const senderRate = data.sampleRate || ctx.sampleRate;
 
-        // NEW: Manual Resample to match local hardware rate (Fixes Safari crackle/pitch)
-        if (senderRate !== ctx.sampleRate) {
-          f32 = resampleAudio(f32, senderRate, ctx.sampleRate);
-        }
-
         // Resync jitter buffer
-        if (playTime < ctx.currentTime)          playTime = ctx.currentTime + 0.06; // 60ms offset for mobile/nighttime stability
-        if (playTime > ctx.currentTime + 1.0)    playTime = ctx.currentTime + 0.06;
+        if (playTime < ctx.currentTime)          playTime = ctx.currentTime + 0.02;
+        if (playTime > ctx.currentTime + 1.0)    playTime = ctx.currentTime + 0.02;
 
-        // Always create at LOCAL rate after resampling
-        const buf = ctx.createBuffer(1, f32.length, ctx.sampleRate);
+        const buf = ctx.createBuffer(1, f32.length, senderRate);
         buf.getChannelData(0).set(f32);
 
         const src = ctx.createBufferSource();
@@ -237,7 +232,6 @@ export default function App() {
     playTime = initAudioContext().currentTime + 999;
 
     const ctx = initAudioContext();
-    primeAudioSession(); // Keep session warm for iOS
     if (ctx.state === 'suspended') await ctx.resume();
 
     setIsRecording(true);
@@ -373,12 +367,6 @@ export default function App() {
 
   const handleAuth = async (e) => {
     e.preventDefault();
-    
-    // GESTURE CAPTURE: Initialize audio EXACTLY on the click event before any awaits.
-    // This is crucial for Safari/iOS compatibility.
-    initAudioContext(); 
-    primeAudioSession();
-
     setAuthError('');
     setAuthLoading(true);
     try {
@@ -398,7 +386,6 @@ export default function App() {
       }
       const data = await res.json();
       if (!res.ok) { setAuthError(data.error || 'Gagal'); setAuthLoading(false); return; }
-      
       setUsername(data.user.display_name);
       setUserPhone(data.user.phone);
       setUserProfile(data.user);
@@ -420,11 +407,6 @@ export default function App() {
   };
 
   const joinChannel = (ch) => {
-    // FIRST INTERACTION: Initialize and Resume Audio Context on channel join
-    const ctx = initAudioContext();
-    primeAudioSession();
-    if (ctx && ctx.state === 'suspended') ctx.resume();
-
     stopRadio(); // PROTECTIVE MUTING: Silence the radio before entering PTT zone!
     setChannel(ch);
     setMessages([]); 

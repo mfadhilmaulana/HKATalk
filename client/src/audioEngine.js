@@ -22,93 +22,17 @@ let audioContext  = null;
 let masterGain    = null;
 let receiverAnalyser = null;
 let micAnalyser   = null;
-let silentAudio   = null; 
-let audioOutputDestination = null; // For iOS Video Sink hack
-
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
-/**
- * Manual Linear Resampler
- * Bypasses buggy Safari internal resampler for real-time 48k -> 44.1k (or vice-versa)
- */
-export function resampleAudio(float32Array, fromRate, toRate) {
-  if (fromRate === toRate) return float32Array;
-  const ratio = fromRate / toRate;
-  const newLength = Math.round(float32Array.length / ratio);
-  const result = new Float32Array(newLength);
-  for (let i = 0; i < newLength; i++) {
-    const pos = i * ratio;
-    const index = Math.floor(pos);
-    const weight = pos - index;
-    if (index + 1 < float32Array.length) {
-      result[i] = float32Array[index] * (1 - weight) + float32Array[index + 1] * weight;
-    } else {
-      result[i] = float32Array[index];
-    }
-  }
-  return result;
-}
-
-/**
- * iOS Audio Session Primer
- * Plays a silent looping sound to keep the audio session 'warm' and on the main speaker.
- * MUST be called inside a user gesture (mousedown/touchstart).
- */
-export function primeAudioSession() {
-  if (!isIOS) return;
-  if (!silentAudio) {
-    // 1-second silent WAV base64
-    const silentWav = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
-    silentAudio = new Audio(silentWav);
-    silentAudio.loop = true;
-  }
-  silentAudio.play().catch(() => {
-    // Standard Safari block if no gesture yet
-  });
-}
 
 // ── AudioContext ──────────────────────────────────────────────────────────────
 
 export function initAudioContext() {
   if (!audioContext) {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    audioContext = new AudioContextClass({
-      latencyHint: 'interactive',
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({
+      latencyHint: 'interactive', // lowest possible latency
     });
-    
     masterGain = audioContext.createGain();
     masterGain.gain.value = 1.0;
-
-    // --- ULTIMATE iOS HACK: Video Sink Routing ---
-    // Forces Safari to use the main speaker and high-priority audio mode.
-    if (isIOS) {
-       try {
-         audioOutputDestination = audioContext.createMediaStreamDestination();
-         
-         const video = document.createElement('video');
-         video.setAttribute('playsinline', 'true');
-         video.setAttribute('autoplay', 'true');
-         video.setAttribute('muted', 'true'); // Required for autoplay on iOS
-         video.style.position = 'absolute';
-         video.style.pointerEvents = 'none';
-         video.style.opacity = '0';
-         video.style.width = '1px';
-         video.style.height = '1px';
-         document.body.appendChild(video);
-         
-         video.srcObject = audioOutputDestination.stream;
-         video.play().catch(e => console.warn('[VideoSink] play failed:', e));
-         
-         // On iOS, connect ONLY to the video sink for output consistency
-         masterGain.connect(audioOutputDestination);
-       } catch (e) {
-         console.error('[VideoSink] init failed:', e);
-         masterGain.connect(audioContext.destination);
-       }
-    } else {
-       // On Non-iOS, connect to the standard destination
-       masterGain.connect(audioContext.destination);
-    }
+    masterGain.connect(audioContext.destination);
   }
   return audioContext;
 }
@@ -183,20 +107,12 @@ export function createMicCapture(stream, onChunk) {
   const sampleRate = ctx.sampleRate; // ACTUAL device sample rate
 
   processor.onaudioprocess = (e) => {
-    let samples = e.inputBuffer.getChannelData(0);
-    const TARGET_RATE = 16000;
-    const nativeRate = ctx.sampleRate;
+    const samples = e.inputBuffer.getChannelData(0);
 
     // Energy VAD — skip silent frames
     let sum = 0;
     for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
     if (Math.sqrt(sum / samples.length) < 0.004) return;
-
-    // NEW: Bandwidth Optimization — Downsample to 16kHz (Standard HD Voice)
-    // This reduces data usage by ~66%, making it stable on weak/nighttime networks
-    if (nativeRate !== TARGET_RATE) {
-      samples = resampleAudio(samples, nativeRate, TARGET_RATE);
-    }
 
     // Convert Float32 → Int16
     const int16 = new Int16Array(samples.length);
@@ -204,7 +120,7 @@ export function createMicCapture(stream, onChunk) {
       int16[i] = Math.max(-32768, Math.min(32767, samples[i] * 32767));
     }
 
-    onChunk(int16.buffer, TARGET_RATE);
+    onChunk(int16.buffer, sampleRate);
   };
 
   // Silent output node to keep graph alive without feeding back to speakers
