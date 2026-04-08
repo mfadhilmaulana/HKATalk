@@ -76,14 +76,9 @@ export default function App() {
     if (!username || !userPhone) return;
     if (socket) return; // Prevent double connections
 
-    // Initialize audio context lazily — don't let it block socket creation
-    try {
-      const ctx = initAudioContext();
-      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-      if (!receiverChain) receiverChain = createReceiverChain();
-    } catch(e) {
-      console.warn('AudioContext init deferred:', e.message);
-    }
+    // Init AudioContext eagerly — needed for beeps and receiver chain
+    initAudioContext().resume().catch(() => {});
+    if (!receiverChain) receiverChain = createReceiverChain();
 
     const newSocket = io();
     setSocket(newSocket);
@@ -92,9 +87,9 @@ export default function App() {
       newSocket.emit('register-user', { phone: userPhone });
     });
 
-    // channel-info: sent to the joiner with full list
+    // channel-info: sent to the joining user
     newSocket.on('channel-info', ({ participants }) => setParticipants(participants));
-    // channel-members: broadcast to EVERYONE in channel when membership changes — fixes detection for existing users
+    // channel-members: broadcast to ALL users in channel when anyone joins/leaves
     newSocket.on('channel-members', ({ participants }) => setParticipants(participants));
     newSocket.on('user-joined', (user) => setParticipants(prev => [...prev.filter(p => p.id !== user.id), user]));
     newSocket.on('user-left', (user) => setParticipants(prev => prev.filter(p => p.id !== user.id)));
@@ -112,7 +107,6 @@ export default function App() {
     });
 
     newSocket.on('video-frame', (data) => {
-      // Show frame if it corresponds to the active speaker
       setActiveFrame(data.frame);
     });
 
@@ -122,7 +116,6 @@ export default function App() {
     });
 
     newSocket.on('incoming-message-notif', (data) => {
-      // In-app notification for messages
       if (navState !== 'chat') {
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification(`Pesan Baru dari ${data.senderName}`, {
@@ -153,7 +146,6 @@ export default function App() {
         setActiveFrame(null);
         if (!isRecordingRef.current) {
           playZelloBeep('start');
-          // DO NOT play static noise - it gets picked up by mic causing feedback
           playTime = initAudioContext().currentTime + 0.05;
         }
       } 
@@ -161,41 +153,27 @@ export default function App() {
         setActiveSpeaker(null);
         setActiveFrame(null);
         if (!isRecordingRef.current) {
-          // No static noise to stop
           playZelloBeep('end');
         }
       } 
+
       if (data.type === 'chunk' && data.buffer) {
         if (isRecordingRef.current) return;
         // Self-echo guard
         if (payload.username === username) return;
         if (!receiverChain) receiverChain = createReceiverChain();
 
+        // Ensure AudioContext is running (can go suspended on mobile after inactivity)
+        const ctx = initAudioContext();
+        if (ctx.state !== 'running') ctx.resume().catch(() => {});
+
         try {
-          // Socket.io may deliver binary as ArrayBuffer, Buffer, or Uint8Array
-          // Normalize to ArrayBuffer so Int16Array view works on all browsers
-          let rawBuf = data.buffer;
-          if (!(rawBuf instanceof ArrayBuffer)) {
-            if (rawBuf.buffer && rawBuf.buffer instanceof ArrayBuffer) {
-              rawBuf = rawBuf.buffer.slice(rawBuf.byteOffset, rawBuf.byteOffset + rawBuf.byteLength);
-            } else if (typeof rawBuf === 'object') {
-              const vals = Object.values(rawBuf);
-              rawBuf = new Uint8Array(vals).buffer;
-            }
-          }
-
-          if (!rawBuf || rawBuf.byteLength === 0) {
-            console.warn('[audio-rx] empty buffer, skipping');
-            return;
-          }
-
-          const int16 = new Int16Array(rawBuf);
+          // In browsers, socket.io-client delivers binary as ArrayBuffer natively.
+          // Direct Int16Array view works in all browsers.
+          const int16 = new Int16Array(data.buffer);
           const f32   = new Float32Array(int16.length);
           for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32767;
 
-          const ctx = initAudioContext();
-          // ALWAYS try to resume — iOS goes suspended between interactions
-          if (ctx.state !== 'running') ctx.resume().catch(() => {});
           const senderRate = data.sampleRate || ctx.sampleRate;
 
           // Resync jitter buffer
@@ -211,13 +189,13 @@ export default function App() {
           src.start(playTime);
           playTime += buf.duration;
         } catch(e) {
-          console.warn('[audio-rx] decode error:', e.message, 'bufType:', typeof data.buffer, 'byteLen:', data.buffer?.byteLength ?? data.buffer?.length);
+          console.warn('[audio-rx] error:', e.message);
         }
       }
     });
 
     return () => {
-       // We don't disconnect socket easily anymore to let signaling work in background
+       // Keep socket alive for background signaling
     }
   }, [username, userPhone]);
 
@@ -225,32 +203,6 @@ export default function App() {
     if (socket && channel && username) {
       socket.emit('join-channel', { username, channel });
       setMessages(prev => [...prev, { text: `Tergabung di saluran: ${channel}`, type: 'text', self: false, username: 'System', timestamp: new Date().toISOString() }]);
-
-      // Pre-warm microphone so PTT is INSTANT (no getUserMedia delay on button press)
-      const prewarmMic = async () => {
-        try {
-          if (!globalStream || !globalStream.active || globalStream.getAudioTracks().some(t => t.readyState === 'ended')) {
-            globalStream = await navigator.mediaDevices.getUserMedia({
-              audio: {
-                channelCount: 1,
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-                googEchoCancellation: true,
-                googAutoGainControl: true,
-                googNoiseSuppression: true,
-                googHighpassFilter: true,
-                googExperimentalEchoCancellation: true,
-                googExperimentalNoiseSuppression: true,
-              }
-            });
-          }
-        } catch(e) {
-          // Mic permission not granted yet — will try again on first PTT
-          console.warn('[prewarm] mic not ready yet:', e.message);
-        }
-      };
-      prewarmMic();
     }
   }, [socket, channel, username]);
 
@@ -277,27 +229,26 @@ export default function App() {
 
   const startRecording = async () => {
     if (isRecordingRef.current) return;
-    if (!socket) { console.warn('[PTT] No socket — aborting'); return; }
-    if (!channel) { console.warn('[PTT] No channel — aborting'); return; }
 
     // Stop radio to avoid feedback
     if (activeRadio) stopRadio();
 
-    // Ensure AudioContext is running FIRST (critical for iOS/mobile)
-    const ctx = initAudioContext();
-    if (ctx.state !== 'running') {
-      try { await ctx.resume(); } catch(e) { console.warn('[PTT] ctx resume:', e); }
-    }
-
-    // Immediately mute speaker + flush any stale incoming audio queue
+    // Immediately mute speaker + flush audio queue
     setSpeakerMute(true);
-    playTime = ctx.currentTime + 999;
+    playTime = initAudioContext().currentTime + 999;
+
+    const ctx = initAudioContext();
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    // Signal peers we're starting to transmit
+    setIsRecording(true);
+    isRecordingRef.current = true;
+    playZelloBeep('start');
+    if (socket) socket.emit('audio-stream', { type: 'start' });
 
     try {
-      // Mic stream should already be pre-warmed from channel join.
-      // If not (permission denied earlier, or stream ended), get it now.
+      // Get mic stream (re-use cached if still active)
       if (!globalStream || !globalStream.active || globalStream.getAudioTracks().some(t => t.readyState === 'ended')) {
-        console.log('[PTT] Acquiring mic stream...');
         globalStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
@@ -312,28 +263,12 @@ export default function App() {
             googExperimentalNoiseSuppression: true,
           }
         });
-        console.log('[PTT] Mic acquired. Rate:', globalStream.getAudioTracks()[0]?.getSettings()?.sampleRate);
-      } else {
-        console.log('[PTT] Using pre-warmed mic stream');
       }
 
-      // Re-confirm channel join is still active on server
-      socket.emit('join-channel', { username, channel });
-
-      // Mark recording and notify peers
-      setIsRecording(true);
-      isRecordingRef.current = true;
-      playZelloBeep('start');
-      socket.emit('audio-stream', { type: 'start' });
-      console.log('[PTT] START sent → channel:', channel);
-
       // ScriptProcessor — reliable across ALL browsers & devices
-      let chunkCount = 0;
       micCapture = createMicCapture(globalStream, (pcmBuffer, sampleRate) => {
         if (!isRecordingRef.current) return;
-        chunkCount++;
-        if (chunkCount <= 3) console.log(`[PTT] Sending chunk #${chunkCount}, sampleRate=${sampleRate}`);
-        socket.emit('audio-stream', { type: 'chunk', buffer: pcmBuffer, sampleRate });
+        if (socket) socket.emit('audio-stream', { type: 'chunk', buffer: pcmBuffer, sampleRate });
       });
 
       // Video broadcast
@@ -343,11 +278,9 @@ export default function App() {
         }, 200);
       }
     } catch (err) {
-      console.error('[PTT] Mic error:', err.message);
+      console.error('Mic error:', err);
       alert('Gagal mengakses mikrofon: ' + err.message);
-      setIsRecording(false);
-      isRecordingRef.current = false;
-      setSpeakerMute(false);
+      stopRecording();
     }
   };
 
