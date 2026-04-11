@@ -55,6 +55,9 @@ export default function App() {
   const [activeFrame, setActiveFrame] = useState(null);
   const [globalActiveSpeakers, setGlobalActiveSpeakers] = useState({});
   const [channelOccupancy, setChannelOccupancy] = useState({});
+  
+  // Track remote WebRTC streams for React rendering
+  const [remoteStreams, setRemoteStreams] = useState({});
 
   // Refs for consistent Socket Reconnection (avoids stale closures)
   const usernameRef = useRef('');
@@ -88,25 +91,15 @@ export default function App() {
 
     // Initialize WebRTC Mesh
     const handleRemoteTrackAdded = (targetId, stream) => {
-      const audioId = `remote-audio-${targetId}`;
-      let audioEl = document.getElementById(audioId);
-      if (!audioEl) {
-         audioEl = document.createElement('audio');
-         audioEl.id = audioId;
-         audioEl.autoplay = true;
-         // Do not show controls, hidden player
-         document.body.appendChild(audioEl);
-      }
-      audioEl.srcObject = stream;
+      setRemoteStreams(prev => ({ ...prev, [targetId]: stream }));
     };
 
     const handleRemoteTrackRemoved = (targetId) => {
-      const audioEl = document.getElementById(`remote-audio-${targetId}`);
-      if (audioEl) {
-        audioEl.pause();
-        audioEl.srcObject = null;
-        audioEl.remove();
-      }
+      setRemoteStreams(prev => {
+        const next = { ...prev };
+        delete next[targetId];
+        return next;
+      });
     };
 
     webrtcEngine = new WebRTCMesh(newSocket, handleRemoteTrackAdded, handleRemoteTrackRemoved);
@@ -438,12 +431,14 @@ export default function App() {
 
   const leaveChannel = () => {
     if (channel.startsWith('MEETING-')) setNavState('conference');
-    else if (channel.startsWith('DM-')) setNavState('chat'); // Go back to chat from PTT
+    else if (channel.startsWith('DM-')) setNavState('chat'); 
     else setNavState('channel');
     
     setChannel('');
+    setRemoteStreams({}); // Clear old WebRTC streams
+    
     if (socket) {
-       socket.emit('join-channel', { username, channel: 'Lobby' }); // Emits to leave previous rooms
+       socket.emit('join-channel', { username, channel: 'Lobby' }); 
     }
     if (globalVideoStream) {
       globalVideoStream.getTracks().forEach(t => t.stop());
@@ -634,6 +629,17 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* WebRTC Audio Renderer (Hidden) */}
+      <div style={{ display: 'none' }}>
+        {Object.entries(remoteStreams).map(([id, stream]) => (
+           <audio 
+             key={id} 
+             autoPlay 
+             playsInline 
+             ref={el => { if(el && el.srcObject !== stream) el.srcObject = stream; }} 
+           />
+        ))}
+      </div>
     </div>
   );
 }
