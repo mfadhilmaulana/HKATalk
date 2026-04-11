@@ -4,6 +4,12 @@ let pool = null;
 
 let DB_URL = process.env.DATABASE_URL;
 
+// SECURE DNS PATCH: If Railway injected an unresolvable internal URL, 
+// dynamically fix the host/port ONLY, without hardcoding your password in the code.
+if (DB_URL && DB_URL.includes('postgres.railway.internal')) {
+  DB_URL = DB_URL.replace('postgres.railway.internal:5432', 'mainline.proxy.rlwy.net:10322');
+}
+
 if (DB_URL) {
   pool = new Pool({
     connectionString: DB_URL,
