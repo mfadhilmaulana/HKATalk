@@ -19,7 +19,7 @@ let webrtcEngine = null;
 
 // Helper to draw video to canvas
 const captureVideoFrame = (videoElement, socket, username, channel) => {
-  if (!videoElement || videoElement.readyState !== videoElement.HAVE_ENOUGH_DATA) return;
+  if (!videoElement || videoElement.readyState < 2) return;
   const canvas = document.createElement('canvas');
   canvas.width = 320; 
   canvas.height = 240;
@@ -81,6 +81,14 @@ export default function App() {
       Notification.requestPermission();
     }
   }, []);
+
+  useEffect(() => {
+    if (activeSpeaker) {
+      startStaticNoise();
+    } else {
+      stopStaticNoise();
+    }
+  }, [activeSpeaker]);
 
   useEffect(() => {
     if (!username || !userPhone) return;
@@ -151,6 +159,17 @@ export default function App() {
     
     newSocket.on('active-speakers-update', (data) => {
        setGlobalActiveSpeakers(data);
+       if (channelRef.current && data[channelRef.current]) {
+          const speakers = data[channelRef.current];
+          const remoteSpeakers = speakers.filter(s => s !== usernameRef.current);
+          if (remoteSpeakers.length > 0) {
+             setActiveSpeaker(remoteSpeakers[remoteSpeakers.length - 1]);
+          } else {
+             setActiveSpeaker(null);
+          }
+       } else {
+          setActiveSpeaker(null);
+       }
     });
 
     newSocket.on('channel-occupancy-update', (data) => {
