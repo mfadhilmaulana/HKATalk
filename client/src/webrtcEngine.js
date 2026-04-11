@@ -93,7 +93,7 @@ export class WebRTCMesh {
 
     peer.onicecandidate = (event) => {
       if (event.candidate) {
-        this.socket.emit('webrtc-ice-candidate', { target: targetId, candidate: event.candidate });
+        this.socket.emit('webrtc-ice-candidate', { target: targetId, candidate: event.candidate, type: 'ptt' });
       }
     };
 
@@ -123,25 +123,27 @@ export class WebRTCMesh {
     try {
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      this.socket.emit('webrtc-offer', { target: targetId, offer });
+      this.socket.emit('webrtc-offer', { target: targetId, offer, type: 'ptt' });
     } catch (e) {
       console.error('Error creating offer', e);
     }
   }
 
   async handleOffer(data) {
+    if (data.type !== 'ptt') return; // Ignore meeting or other WebRTC types
     const peer = this.createPeer(data.senderId);
     try {
       await peer.setRemoteDescription(new RTCSessionDescription(data.offer));
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
-      this.socket.emit('webrtc-answer', { target: data.senderId, answer });
+      this.socket.emit('webrtc-answer', { target: data.senderId, answer, type: 'ptt' });
     } catch (e) {
       console.error('Error handling offer', e);
     }
   }
 
   async handleAnswer(data) {
+    if (data.type !== 'ptt') return;
     const peer = this.peers[data.senderId];
     if (peer) {
       try {
@@ -153,6 +155,7 @@ export class WebRTCMesh {
   }
 
   async handleIceCandidate(data) {
+    if (data.type !== 'ptt') return;
     const peer = this.peers[data.senderId];
     if (peer && data.candidate) {
       try {

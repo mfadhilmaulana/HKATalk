@@ -73,8 +73,8 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
     if (!socket) return;
     
     startMedia(isFrontCamera).then(() => {
-      const meetingChannel = `RAHASIA-WEB-${roomCode}`;
-      socket.emit('join-channel', { username, channel: meetingChannel });
+      // Logic adjusted: We use the consistent MEETING-XXXX channel passed from App.jsx
+      // No longer using RAHASIA-WEB- prefix to avoid leaving the main room context
       
       socket.on('channel-info', ({ participants }) => {
         participants.forEach(p => {
@@ -83,19 +83,22 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
       });
 
       socket.on('webrtc-offer', async (data) => {
+        if (data.type !== 'meeting') return;
         const pc = createPeerConnection(data.senderId, data.username, false);
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        socket.emit('webrtc-answer', { target: data.senderId, answer });
+        socket.emit('webrtc-answer', { target: data.senderId, answer, type: 'meeting' });
       });
 
       socket.on('webrtc-answer', async (data) => {
+        if (data.type !== 'meeting') return;
         const pc = connectionsRef.current[data.senderId];
         if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
       });
 
       socket.on('webrtc-ice-candidate', async (data) => {
+        if (data.type !== 'meeting') return;
         const pc = connectionsRef.current[data.senderId];
         if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
       });
@@ -147,7 +150,7 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('webrtc-ice-candidate', { target: targetId, candidate: event.candidate });
+        socket.emit('webrtc-ice-candidate', { target: targetId, candidate: event.candidate, type: 'meeting' });
       }
     };
 
@@ -174,7 +177,7 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
     if (isInitiator) {
       pc.createOffer().then(offer => {
         pc.setLocalDescription(offer);
-        socket.emit('webrtc-offer', { target: targetId, offer });
+        socket.emit('webrtc-offer', { target: targetId, offer, type: 'meeting' });
       });
     }
     return pc;

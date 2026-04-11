@@ -143,7 +143,8 @@ export default function App() {
     newSocket.on('channel-members', async ({ participants }) => {
        setParticipants(participants);
        
-       if (webrtcEngine && channelRef.current && channelRef.current !== 'Lobby') {
+       // Only run PTT Mesh if NOT in a video meeting (Meetings handle their own WebRTC)
+       if (webrtcEngine && channelRef.current && channelRef.current !== 'Lobby' && !channelRef.current.startsWith('MEETING-')) {
           // Ensure local mic track exists
           await webrtcEngine.initLocalStream();
 
