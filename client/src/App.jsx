@@ -387,6 +387,8 @@ export default function App() {
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthError('');
+    initAudioContext().resume(); // WAKE UP audio on first button click!
+    if (authMode === 'login') {
     setAuthLoading(true);
     try {
       let res;
@@ -429,10 +431,14 @@ export default function App() {
   };
 
   const joinChannel = (ch) => {
-    initAudioContext().resume(); // Must be launched on user tap to bypass iOS audio lock
-    stopRadio(); // PROTECTIVE MUTING: Silence the radio before entering PTT zone!
+    initAudioContext().resume().catch(console.error); // Force wake-up global audio engine
+    stopRadio(); 
     setChannel(ch);
     setMessages([]); 
+    if (webrtcEngine) {
+       webrtcEngine.audioCtx.resume().catch(console.error); // Force wake-up WebRTC engine
+    }
+    
     if (ch.startsWith('MEETING-')) {
       setNavState('meeting');
     } else if (ch.startsWith('CALL-') || ch.startsWith('VC-')) {

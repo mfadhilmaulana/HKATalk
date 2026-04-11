@@ -1,4 +1,4 @@
-export const AUDIO_SAMPLE_RATE = 16000;
+export const AUDIO_SAMPLE_RATE = 48000;
 let audioContext = null;
 let masterGainNode = null;
 let staticNoiseNode = null;
@@ -32,8 +32,7 @@ export function startStaticNoise() {
   filter.frequency.value = 3000;
   
   const gain = ctx.createGain();
-  gain.gain.value = 0.0125; 
-
+  gain.gain.value = 0.0025; // Reduced to 20% for subtle HT feel without drowning out voice
   staticNoiseNode.connect(filter);
   filter.connect(gain);
   gain.connect(ctx.destination); // bypass master mute

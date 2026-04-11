@@ -5,9 +5,14 @@ const iceServers = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
     { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
     { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
-  ]
+  ],
+  iceCandidatePoolSize: 10
 };
 
 export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
@@ -175,10 +180,13 @@ export default function MeetingScreen({ roomCode, username, socket, onLeave }) {
     };
 
     if (isInitiator) {
-      pc.createOffer().then(offer => {
-        pc.setLocalDescription(offer);
-        socket.emit('webrtc-offer', { target: targetId, offer, type: 'meeting' });
-      });
+      // Small delay to prevent glare (both peers offering at exactly the same time)
+      setTimeout(() => {
+        pc.createOffer().then(offer => {
+          pc.setLocalDescription(offer);
+          socket.emit('webrtc-offer', { target: targetId, offer, type: 'meeting' });
+        });
+      }, 1000);
     }
     return pc;
   };

@@ -17,7 +17,7 @@ export class WebRTCMesh {
 
     // Audio Visualizer hooks
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    this.audioCtx = new AudioContextClass();
+    this.audioCtx = new AudioContextClass({ sampleRate: 48000 });
     
     this.micAnalyser = this.audioCtx.createAnalyser();
     this.micAnalyser.fftSize = 64;
@@ -70,6 +70,7 @@ export class WebRTCMesh {
   }
 
   setMute(isMuted) {
+    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
     if (this.localStream) {
        this.localStream.getAudioTracks().forEach(t => {
            t.enabled = !isMuted;
