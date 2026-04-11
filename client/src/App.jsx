@@ -388,7 +388,6 @@ export default function App() {
     e.preventDefault();
     setAuthError('');
     initAudioContext().resume(); // WAKE UP audio on first button click!
-    if (authMode === 'login') {
     setAuthLoading(true);
     try {
       let res;
