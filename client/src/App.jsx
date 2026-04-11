@@ -9,7 +9,7 @@ import ContactScreen from './components/ContactScreen';
 import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
-import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, createMicAnalyser, clearMicAnalyser, AUDIO_SAMPLE_RATE } from './audioEngine';
+import { initAudioContext, playZelloBeep, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, createMicAnalyser, clearMicAnalyser, AUDIO_SAMPLE_RATE } from './audioEngine';
 import { WebRTCMesh } from './webrtcEngine';
 
 let globalVideoStream = null;
@@ -82,10 +82,6 @@ export default function App() {
   useEffect(() => {
     if (!username || !userPhone) return;
     if (socket) return; // Prevent double connections
-    
-    if (!receiverChain) {
-      receiverChain = createReceiverChain();
-    }
 
     const newSocket = io();
     setSocket(newSocket);
