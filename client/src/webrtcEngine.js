@@ -19,26 +19,29 @@ export class WebRTCMesh {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     this.audioCtx = new AudioContextClass({ sampleRate: 48000 });
     
+    // Analysers for visualization
     this.micAnalyser = this.audioCtx.createAnalyser();
     this.micAnalyser.fftSize = 64;
-    this.micAnalyser.smoothingTimeConstant = 0.5;
-
+    
     this.receiverAnalyser = this.audioCtx.createAnalyser();
     this.receiverAnalyser.fftSize = 64;
-    this.receiverAnalyser.smoothingTimeConstant = 0.5;
 
-    // Mix all remote streams into one analyser
+    // Output destination for actually HEARING the speaker
+    this.outputGain = this.audioCtx.createGain();
+    this.outputGain.connect(this.audioCtx.destination);
+
+    // Mix all remote streams into the analyser and then to the output
     this.remoteMixer = this.audioCtx.createGain();
     this.remoteMixer.connect(this.receiverAnalyser);
+    this.receiverAnalyser.connect(this.outputGain);
     
-    // We must connect analysers to a silent destination to keep them active in some browsers
+    // Auxiliary path to keep analysers active while muted
     const silentGain = this.audioCtx.createGain();
     silentGain.gain.value = 0;
     this.micAnalyser.connect(silentGain);
-    this.receiverAnalyser.connect(silentGain);
     silentGain.connect(this.audioCtx.destination);
 
-    this.remoteSources = {}; // targetId -> MediaStreamAudioSourceNode
+    this.remoteSources = {}; 
   }
 
   getMicAnalyser() { return this.micAnalyser; }
@@ -50,7 +53,7 @@ export class WebRTCMesh {
         this.localStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             channelCount: 1,
-            sampleRate: 48000, // Best quality Opus audio natively
+            sampleRate: { ideal: 48000 }, 
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true
@@ -84,8 +87,13 @@ export class WebRTCMesh {
     const peer = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stundelay.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' }
+      ],
+      iceCandidatePoolSize: 10
     });
 
     if (this.localStream) {
