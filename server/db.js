@@ -2,12 +2,7 @@ const { Pool } = require('pg');
 
 let pool = null;
 
-let DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:NqoDMnsbOmxdkHCWODADFVYZJzqUhIiR@mainline.proxy.rlwy.net:10322/railway';
-
-// Railway Internal DNS bug patch: If Railway injected an unresolvable internal URL, force it to use the Public TCP Proxy
-if (DB_URL && DB_URL.includes('postgres.railway.internal')) {
-  DB_URL = 'postgresql://postgres:NqoDMnsbOmxdkHCWODADFVYZJzqUhIiR@mainline.proxy.rlwy.net:10322/railway';
-}
+let DB_URL = process.env.DATABASE_URL;
 
 if (DB_URL) {
   pool = new Pool({
