@@ -10,15 +10,12 @@ import TalkScreen from './components/TalkScreen';
 import ChatScreen from './components/ChatScreen';
 import MeetingScreen from './components/MeetingScreen';
 import { initAudioContext, playZelloBeep, createReceiverChain, setSpeakerMute, playSiren, playRingtone, stopRingtone, startStaticNoise, stopStaticNoise, createMicAnalyser, clearMicAnalyser, AUDIO_SAMPLE_RATE } from './audioEngine';
+import { WebRTCMesh } from './webrtcEngine';
 
-let mediaStreamSource = null;
-let scriptNode = null;
-let globalStream = null;
 let globalVideoStream = null;
 let videoInterval = null;
-let playTime = 0;
-let receiverChain = null;
 let radioPlayer = typeof Audio !== 'undefined' ? new Audio() : null;
+let webrtcEngine = null;
 
 // Helper to draw video to canvas
 const captureVideoFrame = (videoElement, socket, username, channel) => {
@@ -93,6 +90,32 @@ export default function App() {
     const newSocket = io();
     setSocket(newSocket);
 
+    // Initialize WebRTC Mesh
+    const handleRemoteTrackAdded = (targetId, stream) => {
+      const audioId = `remote-audio-${targetId}`;
+      let audioEl = document.getElementById(audioId);
+      if (!audioEl) {
+         audioEl = document.createElement('audio');
+         audioEl.id = audioId;
+         audioEl.autoplay = true;
+         // Do not show controls, hidden player
+         document.body.appendChild(audioEl);
+      }
+      audioEl.srcObject = stream;
+    };
+
+    const handleRemoteTrackRemoved = (targetId) => {
+      const audioEl = document.getElementById(`remote-audio-${targetId}`);
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.srcObject = null;
+        audioEl.remove();
+      }
+    };
+
+    webrtcEngine = new WebRTCMesh(newSocket, handleRemoteTrackAdded, handleRemoteTrackRemoved);
+    window.webrtcEngineInstance = webrtcEngine;
+
     newSocket.on('connect', () => {
       newSocket.emit('register-user', { phone: userPhone });
       // If we reconnect out of nowhere and we were in a channel, tell the server
@@ -120,8 +143,21 @@ export default function App() {
        setMessages(prev => [...prev, { ...data, self: false }]);
     });
     
-    newSocket.on('channel-members', ({ participants }) => {
+    newSocket.on('channel-members', async ({ participants }) => {
        setParticipants(participants);
+       
+       if (webrtcEngine && channelRef.current && channelRef.current !== 'Lobby') {
+          // Ensure local mic track exists
+          await webrtcEngine.initLocalStream();
+
+          participants.forEach(p => {
+             // Glare prevention: only let the lower socket.id send the offer
+             // The higher one will wait to receive the offer
+             if (p.id !== newSocket.id && newSocket.id < p.id && !webrtcEngine.peers[p.id]) {
+                webrtcEngine.sendOffer(p.id);
+             }
+          });
+       }
     });
     
     newSocket.on('active-speakers-update', (data) => {
@@ -174,55 +210,16 @@ export default function App() {
         setActiveFrame(null);
         if (!isRecordingRef.current) {
           playZelloBeep('start');
-          // Wake up AudioContext on the receiving side in case it was suspended (mobile Safari/Chrome)
-          initAudioContext().resume();
-          // DO NOT play static noise - it gets picked up by mic causing feedback
-          playTime = initAudioContext().currentTime + 0.05;
         }
       } 
       else if (data.type === 'end') {
         setActiveSpeaker(null);
         setActiveFrame(null);
         if (!isRecordingRef.current) {
-          // No static noise to stop
           playZelloBeep('end');
         }
       } 
-      if (data.type === 'chunk' && data.buffer) {
-        if (isRecordingRef.current) return;
-        // Self-echo guard: don't play back our own transmitted audio
-        if (payload.username === username) return;
-        // Guard: ensure receiverChain is initialized
-        if (!receiverChain) {
-          receiverChain = createReceiverChain();
-        }
-
-        const int16Array = new Int16Array(data.buffer);
-        const float32Array = new Float32Array(int16Array.length);
-        for (let i = 0; i < int16Array.length; i++) {
-          float32Array[i] = int16Array[i] / 0x7FFF;
-        }
-        
-        const ctx = initAudioContext();
-        // Resync if playTime drifted behind
-        if (playTime < ctx.currentTime) {
-          playTime = ctx.currentTime + 0.02;
-        }
-        // Flush if too far ahead (>1s) to prevent double-buffering
-        if (playTime > ctx.currentTime + 1.0) {
-          playTime = ctx.currentTime + 0.02;
-        }
-        
-        const audioBuffer = ctx.createBuffer(1, float32Array.length, AUDIO_SAMPLE_RATE);
-        audioBuffer.getChannelData(0).set(float32Array);
-        
-        const source = ctx.createBufferSource();
-        source.buffer = audioBuffer;
-        // Direct connection — no per-chunk gain envelope (was causing reverb artifacts)
-        source.connect(receiverChain.input);
-        source.start(playTime);
-        playTime += audioBuffer.duration;
-      }
+      // LEGACY: No more data.type === 'chunk' handling, because audio now flows over WebRTC MediaStream exclusively.
     });
 
     return () => {
@@ -267,14 +264,6 @@ export default function App() {
       stopRadio();
     }
     
-    // Immediately mute speaker to prevent any feedback
-    setSpeakerMute(true);
-    // Flush the audio queue so no stale chunks play through the mute window
-    playTime = initAudioContext().currentTime + 999;
-
-    const ctx = initAudioContext();
-    if (ctx.state === 'suspended') await ctx.resume();
-    
     setIsRecording(true);
     isRecordingRef.current = true;
     
@@ -285,58 +274,11 @@ export default function App() {
     if (socket) socket.emit('audio-stream', { type: 'start' });
 
     try {
-      if (!globalStream || !globalStream.active || globalStream.getAudioTracks().some(t => t.readyState === 'ended')) {
-        globalStream = await navigator.mediaDevices.getUserMedia({ 
-          audio: { 
-            channelCount: 1,
-            sampleRate: AUDIO_SAMPLE_RATE,
-            echoCancellation: { ideal: true }, 
-            noiseSuppression: { ideal: true },
-            autoGainControl: { ideal: true },
-            googEchoCancellation: true,
-            googAutoGainControl: true,
-            googNoiseSuppression: true,
-            googHighpassFilter: true,
-            googTypingNoiseDetection: true,
-            googNoiseReduction: true
-          } 
-        });
+      if (webrtcEngine) {
+        await webrtcEngine.initLocalStream();
+        // Unmute WebRTC track (start broadcasting)
+        webrtcEngine.setMute(false);
       }
-      
-      mediaStreamSource = ctx.createMediaStreamSource(globalStream);
-      scriptNode = ctx.createScriptProcessor(1024, 1, 1); // 1024 = ~64ms latency at 16kHz (was 4096 = 256ms)
-      
-      scriptNode.onaudioprocess = (e) => {
-        if (!isRecordingRef.current) return;
-        const float32Array = e.inputBuffer.getChannelData(0);
-        
-        let rms = 0;
-        for (let i = 0; i < float32Array.length; i++) {
-          rms += float32Array[i] * float32Array[i];
-        }
-        rms = Math.sqrt(rms / float32Array.length);
-        
-        // Lower threshold: 0.003 so soft voices aren't gated out (was 0.01 which cut syllable edges)
-        if (rms < 0.003) {
-          return; 
-        }
-
-        const int16Array = new Int16Array(float32Array.length);
-        for (let i = 0; i < float32Array.length; i++) {
-          int16Array[i] = Math.max(-1, Math.min(1, float32Array[i])) * 0x7FFF;
-        }
-        if (socket) socket.emit('audio-stream', { type: 'chunk', buffer: int16Array.buffer });
-      };
-      
-      const zeroGain = ctx.createGain();
-      zeroGain.gain.value = 0;
-      
-      mediaStreamSource.connect(scriptNode);
-      scriptNode.connect(zeroGain);
-      zeroGain.connect(ctx.destination);
-
-      // Connect mic analyser for the audio visualizer
-      createMicAnalyser(mediaStreamSource);
 
       // Start Video broadcast loop if Video is enabled!
       if (isVideoEnabled && localVideoRef.current) {
@@ -345,7 +287,7 @@ export default function App() {
         }, 200); // 5 FPS
       }
     } catch (err) {
-      console.error('Error accessing microphone:', err);
+      console.error('Error in WebRTC PTT:', err);
       alert('Microphone access is required to talk.');
       stopRecording();
     }
@@ -359,26 +301,15 @@ export default function App() {
     setTimeout(() => { playZelloBeep('end'); }, 100);
     if (socket) socket.emit('audio-stream', { type: 'end' });
 
-    if (scriptNode) {
-      scriptNode.disconnect();
-      scriptNode = null;
-    }
-    if (mediaStreamSource) {
-      mediaStreamSource.disconnect();
-      mediaStreamSource = null;
+    if (webrtcEngine) {
+      // Mute WebRTC track (stop broadcasting)
+      webrtcEngine.setMute(true);
     }
     
     if (videoInterval) {
       clearInterval(videoInterval);
       videoInterval = null;
     }
-
-    clearMicAnalyser();
-
-    // Reset playTime so incoming audio resumes cleanly after PTT
-    playTime = 0;
-    // Unmute with a generous holdoff so receiver chain is fully flushed
-    setTimeout(() => { setSpeakerMute(false); }, 500);
   };
 
   const stopRadio = () => {

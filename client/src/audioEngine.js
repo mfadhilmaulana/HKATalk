@@ -237,6 +237,7 @@ export function createReceiverChain() {
 }
 
 export function getReceiverAnalyser() {
+  if (window.webrtcEngineInstance) return window.webrtcEngineInstance.getReceiverAnalyser();
   return receiverAnalyser;
 }
 
@@ -255,6 +256,7 @@ export function createMicAnalyser(sourceNode) {
 }
 
 export function getMicAnalyser() {
+  if (window.webrtcEngineInstance) return window.webrtcEngineInstance.getMicAnalyser();
   return micAnalyser;
 }
 
