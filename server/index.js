@@ -507,6 +507,12 @@ io.on('connection', (socket) => {
          io.emit('active-speakers-update', Object.fromEntries(Object.entries(activeSpeakers).map(([k,v]) => [k, Array.from(v)])));
       }
       
+      const participants = Array.from(channels[socket.data.channel]).map(id => {
+         const s = io.sockets.sockets.get(id);
+         return { id, username: s ? s.data.username : 'Unknown' };
+      });
+      socket.to(socket.data.channel).emit('channel-members', { channel: socket.data.channel, participants });
+      
       broadcastOccupancy();
     }
   });

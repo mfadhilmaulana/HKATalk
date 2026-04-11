@@ -58,6 +58,15 @@ export default function App() {
   const [activeFrame, setActiveFrame] = useState(null);
   const [globalActiveSpeakers, setGlobalActiveSpeakers] = useState({});
   const [channelOccupancy, setChannelOccupancy] = useState({});
+
+  // Refs for consistent Socket Reconnection (avoids stale closures)
+  const usernameRef = useRef('');
+  const userPhoneRef = useRef('');
+  const channelRef = useRef('');
+
+  useEffect(() => { usernameRef.current = username; }, [username]);
+  useEffect(() => { userPhoneRef.current = userPhone; }, [userPhone]);
+  useEffect(() => { channelRef.current = channel; }, [channel]);
   const isRecordingRef = useRef(false);
   const localVideoRef = useRef(null);
 
@@ -76,8 +85,6 @@ export default function App() {
   useEffect(() => {
     if (!username || !userPhone) return;
     if (socket) return; // Prevent double connections
-
-    initAudioContext().resume();
     
     if (!receiverChain) {
       receiverChain = createReceiverChain();
@@ -88,6 +95,21 @@ export default function App() {
 
     newSocket.on('connect', () => {
       newSocket.emit('register-user', { phone: userPhone });
+      // If we reconnect out of nowhere and we were in a channel, tell the server
+      if (channelRef.current && usernameRef.current) {
+         newSocket.emit('join-channel', { username: usernameRef.current, channel: channelRef.current });
+      }
+    });
+
+    // Deep Reconnection Handling (e.g. phone lock/network drop)
+    newSocket.io.on('reconnect', (attempt) => {
+      console.log('Socket Reconnected on attempt:', attempt);
+      if (userPhoneRef.current) {
+        newSocket.emit('register-user', { phone: userPhoneRef.current });
+      }
+      if (channelRef.current && usernameRef.current) {
+         newSocket.emit('join-channel', { username: usernameRef.current, channel: channelRef.current });
+      }
     });
 
     newSocket.on('channel-info', ({ participants }) => setParticipants(participants));
@@ -443,6 +465,9 @@ export default function App() {
       }
       const data = await res.json();
       if (!res.ok) { setAuthError(data.error || 'Gagal'); setAuthLoading(false); return; }
+      
+      initAudioContext().resume(); // Must be launched on user tap
+      
       setUsername(data.user.display_name);
       setUserPhone(data.user.phone);
       setUserProfile(data.user);
@@ -464,6 +489,7 @@ export default function App() {
   };
 
   const joinChannel = (ch) => {
+    initAudioContext().resume(); // Must be launched on user tap to bypass iOS audio lock
     stopRadio(); // PROTECTIVE MUTING: Silence the radio before entering PTT zone!
     setChannel(ch);
     setMessages([]); 
