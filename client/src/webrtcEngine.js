@@ -180,6 +180,11 @@ export class WebRTCMesh {
     this.onTrackRemoved(targetId);
   }
 
+  clearPeers() {
+    console.log('Clearing all active WebRTC peers for brand new channel session...');
+    Object.keys(this.peers).forEach(id => this.removePeer(id));
+  }
+
   destroy() {
     this.socket.off('webrtc-offer', this.handleOffer);
     this.socket.off('webrtc-answer', this.handleAnswer);

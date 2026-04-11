@@ -32,7 +32,7 @@ export function startStaticNoise() {
   filter.frequency.value = 3000;
   
   const gain = ctx.createGain();
-  gain.gain.value = 0.0025; // Reduced to 20% for subtle HT feel without drowning out voice
+  gain.gain.value = 0.0050; // Increased to 2x (prior was 0.0025) for more immersive HT feel per user request
   staticNoiseNode.connect(filter);
   filter.connect(gain);
   gain.connect(ctx.destination); // bypass master mute

@@ -114,7 +114,8 @@ export default function App() {
     window.webrtcEngineInstance = webrtcEngine;
 
     newSocket.on('connect', () => {
-      newSocket.emit('register-user', { phone: userPhone });
+      console.log('Socket Connected:', newSocket.id);
+      newSocket.emit('register-user', { phone: userPhoneRef.current || userPhone });
       // If we reconnect out of nowhere and we were in a channel, tell the server
       if (channelRef.current && usernameRef.current) {
          newSocket.emit('join-channel', { username: usernameRef.current, channel: channelRef.current });
@@ -468,6 +469,7 @@ export default function App() {
     setMessages([]); 
     if (webrtcEngine) {
        webrtcEngine.audioCtx.resume().catch(console.error); // Force wake-up WebRTC engine
+       webrtcEngine.clearPeers(); // AGGRESSIVE CLEANUP: Drop all old connections before joining new room
     }
     
     if (ch.startsWith('MEETING-')) {
