@@ -379,10 +379,38 @@ export default function App() {
         setUsername(u.display_name);
         setUserPhone(u.phone);
         setUserProfile(u);
-        setNavState('channel');
+        
+        // RESTORE VIEW STATE (Anti-Reset on Refresh)
+        const savedNav = localStorage.getItem('sitalki_last_nav');
+        const savedChannel = localStorage.getItem('sitalki_last_channel');
+        const savedDmRoom = localStorage.getItem('sitalki_last_dm_room');
+        const savedDmName = localStorage.getItem('sitalki_last_dm_name');
+
+        if (savedNav) setNavState(savedNav);
+        else setNavState('channel');
+
+        if (savedChannel) {
+          setChannel(savedChannel);
+          // If we have a channel, we should actively join it on the socket
+          // Logic is handled by the socket's useEffect which watches 'channel'
+        }
+        
+        if (savedDmRoom) setDmRoom(savedDmRoom);
+        if (savedDmName) setDmName(savedDmName);
+        
       } catch (e) {}
     }
   }, []);
+
+  // PERSIST VIEW STATE on change
+  useEffect(() => {
+    if (navState !== 'login') {
+      localStorage.setItem('sitalki_last_nav', navState);
+    }
+    localStorage.setItem('sitalki_last_channel', channel || '');
+    localStorage.setItem('sitalki_last_dm_room', dmRoom || '');
+    localStorage.setItem('sitalki_last_dm_name', dmName || '');
+  }, [navState, channel, dmRoom, dmName]);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -422,6 +450,10 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('sitalki_session');
+    localStorage.removeItem('sitalki_last_nav');
+    localStorage.removeItem('sitalki_last_channel');
+    localStorage.removeItem('sitalki_last_dm_room');
+    localStorage.removeItem('sitalki_last_dm_name');
     setUsername('');
     setUserPhone('');
     setUserProfile(null);
